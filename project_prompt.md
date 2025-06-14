@@ -1,6 +1,6 @@
 # 🎯 Project Prompt for AI Co-Development
 
-I'm building a voice-based AI web app to help non-native English speakers, especially learners from Bangladesh, improve their English speaking proficiency. The app has two main modes:
+I'm building a voice-based AI web app to help non-native English speakers, especially(*not especially, like) learners from Bangladesh, improve their English speaking proficiency. The app has two main modes:
 
 1. **IELTS Practice Mode** – with structured Parts 1–3 speaking questions and feedback aligned to IELTS Band Descriptors (fluency, coherence, lexical resource, grammar, pronunciation).  
 2. **Free Chat Mode** – where the user speaks freely with the AI and receives periodic fluency tips and general feedback.
@@ -11,9 +11,9 @@ The app will use:
 - **TTS** → for speaking responses in Free Chat Mode  
 - The UI and backend will be deployed in the cloud; currently considering Gradio for simplicity, but open to better frameworks.
 
-🔧 Architecture should prioritize performance and remain lightweight enough for free or low-tier cloud environments.
+🔧 Architecture should prioritize performance, (*prioritize free of cost) and remain lightweight enough for free or low-tier cloud environments.
 
-👥 Please consider common speech patterns of Bangladeshi English learners when designing feedback logic.
+👥 Please consider common speech patterns of Bangladeshi English learners when designing feedback logic.(* exclude this)
 
 💡 I want help with:
 - Suggesting a modular architecture for both modes (IELTS and Free Chat)  
@@ -25,4 +25,10 @@ The app will use:
 
 🚨 I want to approach this as a research-grade project — the final goal is a fully working web app and a publishable paper. Please guide me like a co-developer and research assistant.
 
-Let’s start with high-level system design and tool selection for STT, TTS, and LLMs.
+(* I want to build prototype by 30 days, today is -(*date), start user test by 15th July, Present By 25th july)
+
+
+
+
+
+

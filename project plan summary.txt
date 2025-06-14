@@ -1,0 +1,64 @@
+The primary aim of this application is to assist learners in practicing and improving their English language skills. 
+
+The platform will feature two distinct operational modes: a structured environment for International English Language Testing System (IELTS) speaking practice and a more flexible "Free Chat" mode for general conversational practice. 
+
+two principal deliverables: a fully operational web application and a publishable academic research paper detailing the project's design, methodology, and empirical findings.
+
+The core vision is to create an effective AI-powered tool that caters to the linguistic needs of English language learners.
+
+sequential development plan—progressing from high-level system design to the selection of core AI technologies (Speech-to-Text, Text-to-Speech, and Large Language Models), and subsequently to specific feature development
+
+primary evidence for scholarly claims -
+
+data generated from user interactions, 
+the performance metrics of the AI components 
+the pedagogical effectiveness of the learning modules
+
+The app need to - 
+articulate novel contributions, 
+employ a robust methodology, 
+conduct thorough evaluations
+
+ Not must for presentation -
+ Planning for secure data handling, 
+ ensuring user privacy, 
+ obtaining informed consent, and 
+ adhering to institutional review board (IRB) protocols
+ 
+ Consideration -
+
+low latency
+Scalability - not for now
+Statement - thing to worry about, can work around in presentation
+
+Frontend - gradio
+Backend - FastAPI (orchestrate the AI services and manage application logic)
+
+most advantageous approach for this project - Mounting Gradio within FastAPI (Option 2), especially by leveraging a library like fastrtc 14, appears to be the most advantageous approach for this project.
+
+An graph of Conceptual data flow
+
+Models - 
+
+Light, accurate, easy to integrate, near to no training, free.
+Speech-to-Text (STT):  ( Google Cloud Speech-to-Text if free)
+ 
+Text-to-Speech (TTS): Coqui TTS
+
+LLM : 
+For IELTS Feedback (High-Stakes, Complex Task) - Anthropic's Claude series (e.g., Sonnet or Opus) 34 or OpenAI's GPT-4/GPT-4o - multi-stage LLM prompting approach LLMs provide more aligned feedback when addressing assessment criteria individually
+For Free Chat (Lower-Stakes, Conversational Focus): Google's Gemini Flash 37 or Anthropic's Claude Haiku 
+
+
+IELTS Speaking Practice Module: AI-Powered Assessment
+Strategic Prompt Engineering for LLM-based IELTS Evaluation
+A multi-turn or structured prompt is recommended:
+Feedback Presentation:
+Iterative Refinement of Prompts:
+
+
+Free Chat Module: Fostering Conversational Fluency
+LLM as a Language Tutor Persona
+Crafting Engaging Conversation Scenarios
+Implementing Constructive, Real-Time Corrective Feedback
+Encouraging User Output and Confidence
