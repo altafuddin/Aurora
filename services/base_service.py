@@ -1,0 +1,1 @@
+# (Optional) Defines abstract base classes/interfaces for services.

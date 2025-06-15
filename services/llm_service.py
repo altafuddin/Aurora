@@ -1,0 +1,1 @@
+# <-- Gemini Adapter: handles all LLM interaction

@@ -1,0 +1,1 @@
+# <-- FastAPI app definition, mounts the fastrtc stream

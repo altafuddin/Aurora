@@ -1,0 +1,1 @@
+# <-- THE ADAPTERS (Hexagonal Architecture)

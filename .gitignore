@@ -1,1 +1,23 @@
-auenv
+# Python virtual environment
+auenv/
+.auenv/
+__pycache__/
+*.pyc
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Environment variables
+.env
+
+# Google Cloud credentials
+secrets/
+*.json
+
+# IDE and editor directories
+.vscode/
+.idea/
+
+# Temporary files
+roughs/

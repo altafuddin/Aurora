@@ -1,0 +1,35 @@
+# -- Core Web Framework & ASGI Server --
+# FastAPI is the core backend framework. The '[standard]' extra includes
+# optional dependencies like 'python-multipart' for full functionality.
+# Uvicorn is the high-performance ASGI server to run FastAPI. The '[standard]'
+# extra includes performance libraries like 'uvloop' and 'httptools'.
+fastapi[standard]==0.115.4
+uvicorn[standard]==0.34.3
+
+# -- Interactive UI & Real-Time Communication --
+# Gradio is used for rapidly building the web UI.
+# fastrtc simplifies WebRTC integration for real-time audio/video streaming.
+gradio==5.7.1
+fastrtc==0.0.23
+
+# -- AI & Cloud Service SDKs --
+# Official SDK for AssemblyAI Speech-to-Text API.
+assemblyai>=0.3.2
+
+# Recommended official SDK for Google Gemini LLM.
+# This is the new, unified library replacing older ones.
+google-genai
+
+# Official SDK for Google Cloud Text-to-Speech API.
+# Provides enterprise-grade voices and SSML support.
+google-cloud-texttospeech
+
+# -- Secure Configuration Management --
+# Manages environment variables from a.env file for API keys.
+# This is a critical security component.
+python-dotenv==1.1.0
+
+# -- Additional Dependencies for fastrtc/Gradio --
+# These are often required for media processing and are good to have explicitly.
+# opencv-python-headless is for video processing, which fastrtc can handle.
+opencv-python-headless==4.11.0.86

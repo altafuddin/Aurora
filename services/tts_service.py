@@ -1,0 +1,1 @@
+# <-- Google TTS Adapter: handles all TTS interaction

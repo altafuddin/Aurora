@@ -1,0 +1,1 @@
+# <-- AssemblyAI Adapter: handles all STT interaction
