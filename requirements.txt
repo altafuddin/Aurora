@@ -4,21 +4,22 @@
 # Uvicorn is the high-performance ASGI server to run FastAPI. The '[standard]'
 # extra includes performance libraries like 'uvloop' and 'httptools'.
 fastapi[standard]==0.115.4
-uvicorn[standard]==0.34.3
+uvicorn==0.34.3
 
 # -- Interactive UI & Real-Time Communication --
 # Gradio is used for rapidly building the web UI.
 # fastrtc simplifies WebRTC integration for real-time audio/video streaming.
-gradio==5.7.1
+gradio==5.34.1  # Using a working Gradio version
 fastrtc==0.0.23
 
+#  look into pinnning down versions of these packages
 # -- AI & Cloud Service SDKs --
 # Official SDK for AssemblyAI Speech-to-Text API.
 assemblyai>=0.3.2
 
 # Recommended official SDK for Google Gemini LLM.
 # This is the new, unified library replacing older ones.
-google-genai
+google-generativeai==0.4.1 # CRITICAL: Pin to a version compatible with Gradio
 
 # Official SDK for Google Cloud Text-to-Speech API.
 # Provides enterprise-grade voices and SSML support.
