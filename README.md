@@ -21,5 +21,4 @@ Aurora is a voice-based AI web application designed to help non-native English s
 
 ### Running the Application
 
-1. **Start the Backend:** `uvicorn aurora.main:app --reload`
-2. **Start the Frontend (in a new terminal):** `python app.py`
+**Start the App:** `uvicorn aurora.main:app --reload`
