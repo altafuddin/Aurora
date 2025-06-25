@@ -56,6 +56,7 @@ def start_ielts_test():
 
 def process_answer(user_audio, current_state):
     """Processes a user's answer, transcribes it, and moves to the next question."""
+    # Check if test is started
     if not current_state.get("test_started", False):
         return current_state, "Please start the test first.", "", gr.update(visible=False)
     
@@ -90,6 +91,7 @@ def process_answer(user_audio, current_state):
                 current_state["current_question_index"] = 0
                 next_question_text = f"**Part 2**\n\n**Topic:** {current_state['questions']['part2']['topic']}\n\n{current_state['questions']['part2']['cue_card']}\n\n*You have 1 minute to prepare, then speak for 1-2 minutes.*"
                 show_recording = True
+                # TODO: Add logic to show timers here
 
         # Part 2 Logic
         elif current_state["current_part"] == 2:
@@ -205,7 +207,7 @@ def create_gradio_interface():
                         type="filepath", 
                         label="🎤 Record Your Answer"
                     )
-                    gr.Markdown("*Speak clearly and naturally. Recording will stop automatically when you're done.*")
+                    gr.Markdown("*Speak clearly and naturally.*")
                 
                 with gr.Accordion("📝 Your Answers", open=False):
                     transcripts_display = gr.Textbox(
@@ -252,8 +254,4 @@ def create_gradio_interface():
             )
 
     return interface
-
-if __name__ == "__main__":
-    interface = create_gradio_interface()
-    interface.launch()
 
