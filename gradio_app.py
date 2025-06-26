@@ -1,135 +1,162 @@
 # In: gradio_app.py
 
 import gradio as gr
-import time
-from ielts_questions import get_random_ielts_test
 
-# --- Import services ---
+# --- Import services and models ---
 from services.stt_service import AssemblyAITranscriber
 from services.llm_service import GeminiChat
 from services.tts_service import GoogleTTS
 from utils.text_cleaner import clean_text_for_speech
+from data.ielts_questions import IELTSQuestionBank
+from logic.ielts_models import IELTSState
 
 # --- Initialize services once when the app starts ---
 stt_service = AssemblyAITranscriber()
 llm_service = GeminiChat()
 tts_service = GoogleTTS()
+question_bank = IELTSQuestionBank()
 
 # --- IELTS Test Logic ---
 
 def start_ielts_test():
     """Initializes a new IELTS test, pulling random questions."""
     try:
-        test_questions = get_random_ielts_test()
-        initial_state = {
-            "questions": test_questions,
-            "current_part": 1,
-            "current_question_index": 0,
-            "answers": [],
-            "test_started": True,
-            "part2_prep_time_over": False,
-            "part2_speaking_time_over": False,
-            "current_question_text": "",
-        }
+        test_questions = question_bank.get_random_test()
+        first_question = test_questions["part1"]["questions"][0] # Unpack the first question for immediate display
         
-        # Unpack the first question for immediate display
-        first_question = test_questions["part1"]["questions"][0]
-        initial_state["current_question_text"] = first_question
+        # Create a new instance of  dataclass with initial values
+        new_state = IELTSState(
+            questions=test_questions,
+            current_part=1,
+            current_question_index=0,
+            test_started=True,
+            current_question_text=first_question
+        )
+
+        # >> The formatted question for display
+        formatted_question = f"**Part 1: {test_questions['part1']['topic']}**\n\n{first_question}"
+   
         
         return (
-            initial_state,
-            gr.update(visible=False),  # Hide "Start Test" button
-            gr.update(visible=True),   # Show the test interface
-            f"**Part 1: {test_questions['part1']['topic']}**\n\n{first_question}",
-            "",                        # Clear any previous transcripts
-            gr.update(visible=True),   # Show recording interface
+            new_state,                      # >> Return the dataclass object as state
+            gr.update(visible=False),       # Hide "Start Test" button
+            gr.update(visible=True),        # Show the reset button
+            gr.update(visible=True),        # Show the test interface
+            formatted_question,
+            "",
+            gr.update(visible=True)         # Show recording interface
         )
     except Exception as e:
+        error_message = f"Error starting test: {str(e)}"
         return (
-            {"test_started": False},
+            IELTSState(),                   # >> Return a default state on error
             gr.update(visible=True),
             gr.update(visible=False),
-            f"Error starting test: {str(e)}",
-            "",
             gr.update(visible=False),
+            error_message,
+            "",
+            gr.update(visible=False)
         )
 
-def process_answer(user_audio, current_state):
+def process_answer(user_audio, current_state: IELTSState):
     """Processes a user's answer, transcribes it, and moves to the next question."""
     # Check if test is started
-    if not current_state.get("test_started", False):
+    if not current_state.test_started:
         return current_state, "Please start the test first.", "", gr.update(visible=False)
-    
+
     if not user_audio:
         # If no audio, just return the current state without change
-        current_question = current_state["current_question_text"]
-        return current_state, current_question, "\n\n".join(current_state["answers"]), gr.update(visible=True)
+        return current_state, current_state.current_question_text, "\n\n---\n\n".join(current_state.answers), gr.update(visible=True)
 
+    # Guard clause: Ensure questions is not None
+    if not current_state.questions:
+        return (
+            current_state,
+            "Error: No questions loaded. Please restart the test.",
+            "",
+            gr.update(visible=False)
+        )
+    
     try:
         # Transcribe the user's answer
         transcript = stt_service.transcribe(user_audio)
         if transcript.startswith("Error:"):
-            return current_state, current_state["current_question_text"], transcript, gr.update(visible=True)
+            return current_state, current_state.current_question_text, transcript, gr.update(visible=True)
         
         # Store the answer
-        current_state["answers"].append(f"**Q:** {current_state['current_question_text']}\n**A:** {transcript}")
+        current_state.answers.append(f"**Q:** {current_state.current_question_text}\n\n**A:** {transcript}")
 
         # --- Determine the next question ---
         next_question_text = "Test completed!"
         show_recording = False
         
         # Part 1 Logic
-        if current_state["current_part"] == 1:
-            current_state["current_question_index"] += 1
-            part1_questions = current_state["questions"]["part1"]["questions"]
-            if current_state["current_question_index"] < len(part1_questions):
-                next_question_text = f"**Part 1: {current_state['questions']['part1']['topic']}**\n\n{part1_questions[current_state['current_question_index']]}"
+        if current_state.current_part == 1:
+            current_state.current_question_index += 1
+            part1_questions = current_state.questions["part1"]["questions"]
+            if current_state.current_question_index < len(part1_questions):
+                next_question_text = part1_questions[current_state.current_question_index]
                 show_recording = True
             else:
                 # Transition to Part 2
-                current_state["current_part"] = 2
-                current_state["current_question_index"] = 0
-                next_question_text = f"**Part 2**\n\n**Topic:** {current_state['questions']['part2']['topic']}\n\n{current_state['questions']['part2']['cue_card']}\n\n*You have 1 minute to prepare, then speak for 1-2 minutes.*"
+                current_state.current_part = 2
+                current_state.current_question_index = 0
+                next_question_text = f"**Part 2**\n\n**Topic:** {current_state.questions['part2']['topic']}\n\n{current_state.questions['part2']['cue_card']}\n\n*You have 1 minute to prepare, then speak for 1-2 minutes.*"
                 show_recording = True
                 # TODO: Add logic to show timers here
 
         # Part 2 Logic
-        elif current_state["current_part"] == 2:
+        elif current_state.current_part == 2:
             # After answering Part 2, transition to Part 3
-            current_state["current_part"] = 3
-            current_state["current_question_index"] = 0
-            next_question_text = f"**Part 3: {current_state['questions']['part3']['topic']}**\n\n{current_state['questions']['part3']['questions'][0]}"
+            current_state.current_part = 3
+            current_state.current_question_index = 0
+            next_question_text = current_state.questions["part3"]["questions"][0]
             show_recording = True
             
         # Part 3 Logic
-        elif current_state["current_part"] == 3:
-            current_state["current_question_index"] += 1
-            part3_questions = current_state["questions"]["part3"]["questions"]
-            if current_state["current_question_index"] < len(part3_questions):
-                next_question_text = f"**Part 3: {current_state['questions']['part3']['topic']}**\n\n{part3_questions[current_state['current_question_index']]}"
+        elif current_state.current_part == 3:
+            current_state.current_question_index += 1
+            part3_questions = current_state.questions["part3"]["questions"]
+            if current_state.current_question_index < len(part3_questions):
+                next_question_text = part3_questions[current_state.current_question_index]
                 show_recording = True
             else:
                 # End of Test
-                current_state["current_part"] = "completed"
+                current_state.current_part = 0 # Test is over
+                current_state.test_started = False
                 next_question_text = "🎉 **Congratulations!** You have completed the IELTS Speaking test.\n\nYour answers are recorded below. Review them to see how you performed!"
-                show_recording = False
+                show_recording = False # Hide recording interface
 
-        current_state["current_question_text"] = next_question_text
+        current_state.current_question_text = next_question_text
         
         return (
             current_state, 
             next_question_text, 
-            "\n\n---\n\n".join(current_state["answers"]),
+            "\n\n---\n\n".join(current_state.answers),
             gr.update(visible=show_recording)
         )
         
     except Exception as e:
         return (
             current_state,
-            current_state["current_question_text"],
+            current_state.current_question_text,
             f"Error processing answer: {str(e)}",
             gr.update(visible=True)
         )
+
+# --- Reset Functionality ---
+def reset_test():
+    """Resets the UI and the state to its initial condition."""
+    # Return a new, empty IELTSState object to fully reset the state
+    return (
+        IELTSState(),
+        gr.update(visible=True),
+        gr.update(visible=False),
+        gr.update(visible=False),
+        "Click 'Start Test' to begin a new IELTS Speaking simulation.",
+        "",
+        gr.update(visible=False)
+    )
 
 # --- Free Chat Logic ---
 def chat_function(user_audio, chat_history_state):
@@ -157,7 +184,7 @@ def chat_function(user_audio, chat_history_state):
 
 # --- Main UI Function ---
 def create_gradio_interface():
-    with gr.Blocks(theme=gr.themes.Soft(), title="Aurora AI") as interface:
+    with gr.Blocks(theme=gr.themes.Soft(), title="Aurora AI") as interface: # type: ignore
         gr.Markdown("# Aurora: Your AI English Speaking Coach")
         
         with gr.Tab("Free Chat Mode"):
@@ -184,15 +211,8 @@ def create_gradio_interface():
             Click 'Start Test' to begin with a random question set.
             """)
             
-            # State to hold the entire test session's data
-            ielts_state = gr.State({
-                "questions": None,
-                "current_part": 0,
-                "current_question_index": 0,
-                "answers": [],
-                "test_started": False,
-                "current_question_text": "",
-            })
+            # >> Initialize the state component with our new dataclass
+            ielts_state = gr.State(IELTSState())
 
             with gr.Row():
                 start_button = gr.Button("🎯 Start New IELTS Test", variant="primary", size="lg")
@@ -223,7 +243,8 @@ def create_gradio_interface():
                 inputs=[],
                 outputs=[
                     ielts_state, 
-                    start_button, 
+                    start_button,
+                    reset_button, 
                     test_interface, 
                     question_display, 
                     transcripts_display,
@@ -234,23 +255,25 @@ def create_gradio_interface():
             mic_input_ielts.stop_recording(
                 fn=process_answer,
                 inputs=[mic_input_ielts, ielts_state],
-                outputs=[ielts_state, question_display, transcripts_display, recording_interface]
+                outputs=[
+                    ielts_state, 
+                    question_display, 
+                    transcripts_display, 
+                    recording_interface]
             )
-            
-            # Reset functionality
-            def reset_test():
-                return (
-                    {"test_started": False},
-                    gr.update(visible=True),
-                    gr.update(visible=False),
-                    "Click 'Start Test' to begin a new IELTS Speaking simulation.",
-                    "",
-                    gr.update(visible=False)
-                )
             
             reset_button.click(
                 fn=reset_test,
-                outputs=[ielts_state, start_button, test_interface, question_display, transcripts_display, recording_interface]
+                inputs=[],
+                outputs=[
+                    ielts_state, 
+                    start_button, 
+                    reset_button,
+                    test_interface, 
+                    question_display, 
+                    transcripts_display, 
+                    recording_interface
+                ]
             )
 
     return interface
