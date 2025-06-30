@@ -1,7 +1,7 @@
 # In: logic/ielts_logic.py
 
 import gradio as gr
-from .ielts_models import IELTSState
+from .ielts_models import IELTSState, SessionPhase
 
 def start_ielts_test(question_bank):
     """Initializes a new IELTS test session."""
@@ -16,7 +16,8 @@ def start_ielts_test(question_bank):
             current_part=1,
             current_question_index=0,
             test_started=True,
-            current_question_text=first_question
+            current_question_text=first_question,
+            session_phase=SessionPhase.IN_PROGRESS
         )
         
         # The formatted question for display
@@ -29,7 +30,8 @@ def start_ielts_test(question_bank):
             gr.update(visible=True),        # Show the test interface
             formatted_question,
             "",
-            gr.update(visible=True)         # Show recording interface
+            gr.update(visible=True),         # Show recording interface
+            gr.update(visible=False)        # Ensure feedback buttons are hidden
         )
     except Exception as e:
         error_message = f"Error starting test: {str(e)}"
@@ -47,11 +49,26 @@ def process_answer(user_audio, current_state: IELTSState, stt_service):
     """Processes a user's answer and determines the next state of the test."""
     # Check if test is started
     if not current_state.test_started:
-        return current_state, "Please start the test first.", ""
+        return (
+            current_state,
+            "Please start the test first.", 
+            "", 
+            gr.update(visible=True), 
+            gr.update(visible=False)
+        )
+    
+    # Check if it's the last question of the part BEFORE processing
+    is_part_ending = current_state.is_last_question_of_part
 
     if not user_audio:
         # If no audio is provided, return the current state and question text
-        return current_state, current_state.current_question_text, "\n\n---\n\n".join(current_state.answers)
+        return (
+            current_state,
+            current_state.current_question_text,
+            "\n\n---\n\n".join(current_state.answers),
+            gr.update(visible=True),
+            gr.update(visible=False)
+        )
 
     # Guard clause: Ensure questions is not None
     if not current_state.questions:
@@ -59,6 +76,7 @@ def process_answer(user_audio, current_state: IELTSState, stt_service):
             current_state,
             "Error: No questions loaded. Please restart the test.",
             "",
+            gr.update(visible=False),
             gr.update(visible=False)
         )
 
@@ -66,11 +84,30 @@ def process_answer(user_audio, current_state: IELTSState, stt_service):
         # Transcribe the user's audio input``
         transcript = stt_service.transcribe(user_audio)
         if transcript.startswith("Error:"):
-            return current_state, current_state.current_question_text, transcript
+            return (
+                current_state,
+                current_state.current_question_text,
+                transcript,
+                gr.update(visible=True),
+                gr.update(visible=False)
+            )
 
         # Append the transcript to the answers``
         current_state.answers.append(f"**Q:** {current_state.current_question_text}\n\n**A:** {transcript}")
 
+        # Handle the end-of-part case and return immediately.
+        if is_part_ending:
+            current_state.session_phase = SessionPhase.PART_ENDED
+            next_question_text = f"**End of Part {current_state.current_part}**\n\nWhat would you like to do next?"
+            # Hide recording interface, show feedback buttons
+            return (
+                current_state, 
+                next_question_text, 
+                "\n\n---\n\n".join(current_state.answers), 
+                gr.update(visible=False), 
+                gr.update(visible=True)
+            )
+    
         # --- Determine the next question ---
         next_question_text = "Test completed!"
         show_recording = True
@@ -79,45 +116,28 @@ def process_answer(user_audio, current_state: IELTSState, stt_service):
         if current_state.current_part == 1:
             current_state.current_question_index += 1
             part1_questions = current_state.questions["part1"]["questions"]
-            if current_state.current_question_index < len(part1_questions):
-                next_question_text = part1_questions[current_state.current_question_index]
-                show_recording = True
-            else:
-                # Transition to Part 2
-                current_state.current_part = 2
-                current_state.current_question_index = 0
-                next_question_text = f"**Part 2**\n\n**Topic:** {current_state.questions['part2']['topic']}\n\n{current_state.questions['part2']['cue_card']}\n\n*You have 1 minute to prepare, then speak for 1-2 minutes.*"
-                show_recording = True
-                # TODO: Add logic to show timers here
+            next_question_text = part1_questions[current_state.current_question_index]
+            
+        # Part 2 Logic (This is the transition from Part 1 to 2)
+        # We need to adjust the logic slightly, as this code is now only reachable
+        # after the last Part 1 question has been answered (in the previous turn).
+        # The transition logic should happen when we press "Continue".
+        # Let's simplify for now. The core logic will be in the new "continue" function.
         
-        # Part 2 Logic
-        elif current_state.current_part == 2:
-            # After answering Part 2, transition to Part 3
-            current_state.current_part = 3
-            current_state.current_question_index = 0
-            next_question_text = current_state.questions["part3"]["questions"][0]
-            show_recording = True
-
-        # Part 3 Logic
-        elif current_state.current_part == 3:
-            current_state.current_question_index += 1
-            part3_questions = current_state.questions["part3"]["questions"]
-            if current_state.current_question_index < len(part3_questions):
-                next_question_text = part3_questions[current_state.current_question_index]
-                show_recording = True
-            else:
-                # End of Test
-                current_state.current_part = 0 # Test is over
-                current_state.test_started = False
-                next_question_text = "🎉 **Congratulations!** You have completed the IELTS Speaking test.\n\nYour answers are recorded below. Review them to see how you performed!"
-                show_recording = False # Hide recording interface
-
+        # The logic to transition between parts will be moved to a new function
+        # triggered by the "Continue" button. For now, we just advance the question.
+        current_state.current_question_index += 1
+        part_key = f"part{current_state.current_part}"
+        questions_in_part = current_state.questions[part_key]["questions"]
+        next_question_text = questions_in_part[current_state.current_question_index]
+        
         current_state.current_question_text = next_question_text       
         return (
             current_state, 
             next_question_text, 
             "\n\n---\n\n".join(current_state.answers),
-            gr.update(visible=show_recording)
+            gr.update(visible=True),  # Show recording interface
+            gr.update(visible=False)  # Hide feedback buttons after answering a question
         )
         
     except Exception as e:
@@ -125,8 +145,87 @@ def process_answer(user_audio, current_state: IELTSState, stt_service):
             current_state,
             current_state.current_question_text,
             f"Error processing answer: {str(e)}",
-            gr.update(visible=True)
+            gr.update(visible=True),
+            gr.update(visible=False)
         )
+
+# --- Continue to Next Part Functionality ---    
+def continue_to_next_part(current_state: IELTSState):
+    """
+    Transitions the test to the next part after a user decides to continue.
+    """
+
+    # Guard clause: Ensure questions is not None
+    if not current_state.questions:
+        return (
+            current_state,
+            "Error: No questions loaded. Please restart the test.",
+            "",
+            gr.update(visible=False),
+            gr.update(visible=False)
+        )
+    
+    # Hide feedback buttons and show the recording interface
+    show_recording = True
+    show_feedback_buttons = False
+    
+    # Logic to transition from Part 1 to Part 2
+    if current_state.current_part == 1:
+        current_state.current_part = 2
+        current_state.current_question_index = 0
+        current_state.session_phase = SessionPhase.IN_PROGRESS
+        
+        # Prepare the Part 2 cue card
+        next_question_text = (
+            f"**Part 2**\n\n"
+            f"**Topic:** {current_state.questions['part2']['topic']}\n\n"
+            f"{current_state.questions['part2']['cue_card']}\n\n"
+            f"*You have 1 minute to prepare, then speak for 1-2 minutes.*"
+        )
+
+    # Logic to transition from Part 2 to Part 3
+    elif current_state.current_part == 2:
+        current_state.current_part = 3
+        current_state.current_question_index = 0
+        current_state.session_phase = SessionPhase.IN_PROGRESS
+        
+        # Prepare the first question of Part 3
+        part3_topic = current_state.questions['part3']['topic']
+        first_part3_question = current_state.questions['part3']['questions'][0]
+        next_question_text = f"**Part 3: {part3_topic}**\n\n{first_part3_question}"
+    
+    else:
+        # This case shouldn't be reached if the UI is controlled properly,
+        # but it's good practice to handle it.
+        next_question_text = "An unexpected error occurred."
+        show_recording = False
+
+    current_state.current_question_text = next_question_text
+    
+    return (
+        current_state,
+        next_question_text,
+        gr.update(visible=show_recording),
+        gr.update(visible=show_feedback_buttons)
+    )
+
+# --- Feedback Functionality ---
+def get_part_feedback_dummy(current_state: IELTSState):
+    """
+    A placeholder function for the 'Get Feedback' button.
+    """
+    # Placeholder logic:
+    # 1. Set state.session_phase = SessionPhase.GENERATING_FEEDBACK
+    # 2. Call LLM Service
+    # 3. Add report to state.feedback_reports
+    # 4. Return state and gr.update() for feedback display
+    # For now, it just returns a simple message.
+    feedback_report = "Feedback generation is not implemented yet. Coming soon!"
+    
+    # We also need to hide the feedback buttons and show the continue button again
+    # or handle the next step. Let's decide the flow. For now, let's just show the message.
+    # The function needs to return values for all its outputs. Let's add a new gr.Markdown for feedback
+    return gr.update(value=feedback_report, visible=True), gr.update(visible=False)
 
 # --- Reset Functionality ---
 def reset_test():
@@ -139,5 +238,6 @@ def reset_test():
         gr.update(visible=False),
         "Click 'Start Test' to begin a new IELTS Speaking simulation.",
         "",
-        gr.update(visible=False)
+        gr.update(visible=False),
+        gr.update(visible=False)  # Hide feedback buttons
     )

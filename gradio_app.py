@@ -9,7 +9,7 @@ from services.tts_service import GoogleTTS
 from utils.text_cleaner import clean_text_for_speech
 from data.ielts_questions import IELTSQuestionBank
 from logic.ielts_models import IELTSState
-from logic.ielts_logic import start_ielts_test, process_answer, reset_test
+from logic.ielts_logic import start_ielts_test, process_answer, reset_test, continue_to_next_part, get_part_feedback_dummy
 from logic.chat_logic import chat_function
 
 # --- Initialize services and data handlers once when the app starts ---
@@ -76,6 +76,14 @@ def create_gradio_interface():
                     )
                     gr.Markdown("*Speak clearly and naturally.*")
                 
+                with gr.Row(visible=False) as feedback_buttons:
+                    get_part_feedback_button = gr.Button("📊 Get Feedback for This Part", variant="primary")
+                    continue_to_next_part_button = gr.Button("➡️ Continue to Next Part", variant="secondary")
+
+                # New component to display the feedback report
+                feedback_display = gr.Markdown(visible=False)
+
+
                 with gr.Accordion("📝 Your Answers", open=False):
                     transcripts_display = gr.Textbox(
                         label="Recorded Answers", 
@@ -95,7 +103,8 @@ def create_gradio_interface():
                     test_interface, 
                     question_display, 
                     transcripts_display,
-                    recording_interface
+                    recording_interface,
+                    feedback_buttons
                 ]
             )
             
@@ -106,7 +115,9 @@ def create_gradio_interface():
                     ielts_state, 
                     question_display, 
                     transcripts_display, 
-                    recording_interface]
+                    recording_interface,
+                    feedback_buttons
+                ]
             )
             
             reset_button.click(
@@ -119,8 +130,27 @@ def create_gradio_interface():
                     test_interface, 
                     question_display, 
                     transcripts_display, 
-                    recording_interface
+                    recording_interface,
+                    feedback_buttons
                 ]
+            )
+
+            continue_to_next_part_button.click(
+                fn=continue_to_next_part,
+                inputs=[ielts_state],
+                outputs=[
+                    ielts_state, 
+                    question_display, 
+                    recording_interface, 
+                    feedback_buttons
+                ]
+            )
+
+            # click handler for the get_part_feedback_button
+            get_part_feedback_button.click(
+                fn=get_part_feedback_dummy,
+                inputs=[ielts_state],
+                outputs=[feedback_display, feedback_buttons]
             )
 
     return interface
