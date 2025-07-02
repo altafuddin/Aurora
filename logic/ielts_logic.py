@@ -1,7 +1,10 @@
 # In: logic/ielts_logic.py
 
 import gradio as gr
-from .ielts_models import IELTSState, SessionPhase
+from .ielts_models import IELTSState, SessionPhase, IELTSFeedback
+from .prompts import create_single_part_feedback_prompt
+from utils.ielts_utils import format_feedback_for_display
+
 
 def start_ielts_test(question_bank):
     """Initializes a new IELTS test session."""
@@ -42,7 +45,8 @@ def start_ielts_test(question_bank):
             gr.update(visible=False),
             error_message,
             "",
-            gr.update(visible=False)
+            gr.update(visible=False),
+            gr.update(visible=False)        # Hide feedback buttons on error
         )
 
 def process_answer(user_audio, current_state: IELTSState, stt_service):
@@ -110,7 +114,6 @@ def process_answer(user_audio, current_state: IELTSState, stt_service):
     
         # --- Determine the next question ---
         next_question_text = "Test completed!"
-        show_recording = True
 
         # Part 1 Logic
         if current_state.current_part == 1:
@@ -206,7 +209,8 @@ def continue_to_next_part(current_state: IELTSState):
         current_state,
         next_question_text,
         gr.update(visible=show_recording),
-        gr.update(visible=show_feedback_buttons)
+        gr.update(visible=show_feedback_buttons),
+        gr.update(value="", visible=False)
     )
 
 # --- Feedback Functionality ---
@@ -233,11 +237,75 @@ def reset_test():
     # Return a new, empty IELTSState object to fully reset the state
     return (
         IELTSState(),
-        gr.update(visible=True),
-        gr.update(visible=False),
-        gr.update(visible=False),
-        "Click 'Start Test' to begin a new IELTS Speaking simulation.",
-        "",
-        gr.update(visible=False),
-        gr.update(visible=False)  # Hide feedback buttons
+        gr.update(visible=True),   # 1. start_button
+        gr.update(visible=False),  # 2. reset_button
+        gr.update(visible=False),  # 3. test_interface
+        "Click 'Start Test' to begin a new IELTS Speaking simulation.",  # 4. question_display
+        "",                        # 5. transcripts_display
+        gr.update(visible=False),  # 6. recording_interface
+        gr.update(visible=False),  # 7. feedback_buttons
+        gr.update(value="", visible=False)  # 8. feedback_display
     )
+
+def generate_feedback(current_state: IELTSState, llm_service):
+    """
+    Orchestrates the process of getting, parsing, and displaying IELTS feedback.
+    """
+    if not current_state.answers:
+        return "Error: No answers were provided to generate feedback."
+    
+    # Set the session phase to show the app is "busy"
+    current_state.session_phase = SessionPhase.GENERATING_FEEDBACK
+
+    # 1. Set a "loading" state for the UI
+    yield (
+        current_state, 
+        gr.update(value="Generating feedback, please wait..."), # For ielts_feedback_display
+        gr.update(interactive=False), # Disable feedback button to prevent double-clicks
+        gr.update(interactive=False)  # Disable continue button
+    )
+
+    
+    # 2. Prepare data for the prompt
+    # We get the answers for the part that just ended.
+    # A more robust way would be to filter state.user_answers by part number,
+    # but for now, we assume it contains only the answers for the last part.
+    # Format the questions and answers into a single string for the prompt
+    # TODO: Filtering answer based on part
+    questions_and_answers = "\n\n".join(current_state.answers)
+    part_number = current_state.current_part
+
+    # 3. Create the detailed, structured prompt
+    prompt = create_single_part_feedback_prompt(part_number, questions_and_answers)
+
+    # 4. Call the LLM service to get structured feedback
+    feedback_result = llm_service.get_structured_feedback(prompt)
+
+    # --- Process the result ---
+    if isinstance(feedback_result, IELTSFeedback):
+
+        # Success! We got a valid, structured feedback object.
+        current_state.feedback_reports.append(feedback_result)
+
+        # Reset the phase to indicate the part has ended
+        current_state.session_phase = SessionPhase.PART_ENDED
+        # Format the structured data into nice Markdown for display
+        report = format_feedback_for_display(feedback_result)
+        
+        yield (
+            current_state,
+            gr.update(value=report), # Show the formatted feedback
+            gr.update(interactive=True), # Re-enable feedback button
+            gr.update(interactive=True)  # Re-enable continue button
+        )
+    else:
+        # Reset the phase even if there's an error
+        current_state.session_phase = SessionPhase.PART_ENDED
+        # Failure. The service returned an error string.
+        error_message = feedback_result
+        yield (
+            current_state,
+            gr.update(value=error_message), # Show the error message
+            gr.update(interactive=True), # Re-enable feedback button
+            gr.update(interactive=True)  # Re-enable continue button
+        )

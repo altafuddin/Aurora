@@ -34,3 +34,4 @@ python-dotenv==1.1.0
 # These are often required for media processing and are good to have explicitly.
 # opencv-python-headless is for video processing, which fastrtc can handle.
 opencv-python-headless==4.11.0.86
+pydantic==2.8.0

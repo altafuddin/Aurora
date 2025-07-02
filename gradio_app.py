@@ -6,10 +6,15 @@ import gradio as gr
 from services.stt_service import AssemblyAITranscriber
 from services.llm_service import GeminiChat
 from services.tts_service import GoogleTTS
-from utils.text_cleaner import clean_text_for_speech
 from data.ielts_questions import IELTSQuestionBank
 from logic.ielts_models import IELTSState
-from logic.ielts_logic import start_ielts_test, process_answer, reset_test, continue_to_next_part, get_part_feedback_dummy
+from logic.ielts_logic import (
+    start_ielts_test, 
+    process_answer, 
+    reset_test, 
+    continue_to_next_part, 
+    generate_feedback
+)
 from logic.chat_logic import chat_function
 
 # --- Initialize services and data handlers once when the app starts ---
@@ -80,7 +85,7 @@ def create_gradio_interface():
                     get_part_feedback_button = gr.Button("📊 Get Feedback for This Part", variant="primary")
                     continue_to_next_part_button = gr.Button("➡️ Continue to Next Part", variant="secondary")
 
-                # New component to display the feedback report
+                # Component to display the feedback report
                 feedback_display = gr.Markdown(visible=False)
 
 
@@ -131,7 +136,8 @@ def create_gradio_interface():
                     question_display, 
                     transcripts_display, 
                     recording_interface,
-                    feedback_buttons
+                    feedback_buttons,
+                    feedback_display
                 ]
             )
 
@@ -142,15 +148,21 @@ def create_gradio_interface():
                     ielts_state, 
                     question_display, 
                     recording_interface, 
-                    feedback_buttons
+                    feedback_buttons,
+                    feedback_display
                 ]
             )
 
             # click handler for the get_part_feedback_button
             get_part_feedback_button.click(
-                fn=get_part_feedback_dummy,
+                fn=lambda state: generate_feedback(state, llm_service),
                 inputs=[ielts_state],
-                outputs=[feedback_display, feedback_buttons]
+                outputs=[
+                    ielts_state, 
+                    feedback_display, 
+                    get_part_feedback_button, 
+                    continue_to_next_part_button
+                ]
             )
 
     return interface

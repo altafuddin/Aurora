@@ -4,6 +4,9 @@
 import google.generativeai as genai
 from config import GEMINI_API_KEY
 import sys
+import json
+from logic.ielts_models import IELTSFeedback  # Import our Pydantic model
+from pydantic import ValidationError
 
 class GeminiChat:
     def __init__(self):
@@ -46,3 +49,61 @@ class GeminiChat:
         except Exception as e:
             print(f"Error getting response from Gemini: {e}", file=sys.stderr)
             return "Sorry, I encountered an error. Could you please repeat that?"
+        
+    def get_structured_feedback(self, prompt: str) -> IELTSFeedback | str:
+        """
+        Gets a structured JSON response from the Gemini model and parses it
+        into our IELTSFeedback Pydantic model.
+        """
+        if not self.model:
+            return "Error: Gemini model is not initialized."
+
+        try:
+            generation_config = genai.types.GenerationConfig(
+                temperature=0.7,  # Adjust temperature for creativity vs. accuracy
+            )
+
+            response = self.model.generate_content(
+                prompt,
+                generation_config=generation_config
+            )
+            raw_response_text = response.text
+
+            # --- Step 1: Clean the response to isolate the JSON object ---
+            # This handles cases where the LLM might wrap the JSON in ```json ... ```
+            # or add other text. It finds the first '{' and the last '}'.
+            start_index = raw_response_text.find('{')
+            end_index = raw_response_text.rfind('}')
+            
+            if start_index == -1 or end_index == -1:
+                error_msg = f"Error: LLM response did not contain a valid JSON object. Response: {raw_response_text}"
+                print(error_msg, file=sys.stderr)
+                return error_msg
+
+            json_string = raw_response_text[start_index : end_index + 1]
+            
+            # --- Step 2: Parse and validate the JSON string into our Pydantic model ---
+            print("LOG: Received response. Validating JSON...")
+            feedback_data = IELTSFeedback.model_validate_json(json_string)
+            print("LOG: JSON validation successful.")
+            
+            return feedback_data
+
+        except ValidationError as e:
+            # Pydantic will raise a ValidationError if the JSON is malformed
+            # or missing fields. This is our safety net.
+            error_message = f"Error: Pydantic validation failed. The LLM's JSON output did not match our schema. Details: {e}"
+            print(error_message, file=sys.stderr)
+            return error_message
+        except Exception as e:
+            # This block is crucial for debugging when the LLM fails to produce valid JSON
+            error_message = f"Error generating or parsing structured feedback: {e}"
+            print(error_message, file=sys.stderr)
+            try:
+                # Add this to see what the model actually returned
+                print("---RAW LLM RESPONSE---")
+                print(response.text)
+                print("------------------------")
+            except NameError:
+                pass # response might not exist if the error was earlier
+            return "Sorry, I encountered an error while generating feedback. The format of the response was not as expected."

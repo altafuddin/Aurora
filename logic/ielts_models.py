@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
 from enum import Enum, auto
+from pydantic import BaseModel, Field
 
 
 #  Define a SessionPhase Enum
@@ -14,6 +15,34 @@ class SessionPhase(Enum):
     GENERATING_FEEDBACK = auto()  # App is calling the LLM (prevents other actions).
     TEST_COMPLETED = auto()     # The entire test is over
 
+# --- Pydantic Models for Structured LLM Feedback ---
+
+class FeedbackCriterion(BaseModel):
+    """A model to hold the detailed feedback for a single criterion (e.g., Fluency)."""
+    name: str = Field(..., description="The name of the criterion, e.g., 'Fluency and Coherence'")
+    strength: str = Field(..., description="The specific strength identified by the LLM.")
+    improvement_area: str = Field(..., description="The specific area for improvement.")
+
+class OverallSummary(BaseModel):
+    """A model for the overall summary section of the feedback."""
+    part_assessed: str = Field(..., description="The part of the test being assessed, e.g., 'Part 1'")
+    positive_highlight: str = Field(..., description="A key area where the user performed well.")
+    key_improvement_area: str = Field(..., description="The single most important area for the user to improve.")
+
+class DetailedFeedback(BaseModel):
+    """A model that contains the detailed breakdown for all four criteria."""
+    fluency_and_coherence: FeedbackCriterion
+    lexical_resource: FeedbackCriterion
+    grammatical_range_and_accuracy: FeedbackCriterion
+    pronunciation_inferred: FeedbackCriterion
+
+class IELTSFeedback(BaseModel):
+    """
+    The main, top-level model for the entire feedback report.
+    Our application will try to parse the LLM's JSON response into this model.
+    """
+    overall_summary: OverallSummary = Field(..., description="The overall summary of the feedback.")
+    detailed_feedback: DetailedFeedback = Field(..., description="The detailed feedback for each criterion.")
 
 # Define the IELTSState dataclass
 @dataclass
@@ -33,7 +62,7 @@ class IELTSState:
     current_question_text: str = ""
     answers: List[str] = field(default_factory=list)
     session_phase: SessionPhase = SessionPhase.IN_PROGRESS
-    feedback_reports: list[str] = field(default_factory=list)
+    feedback_reports: List[IELTSFeedback] = field(default_factory=list)
 
     # This is a derived property that calculates the questions for the current part.
     @property
