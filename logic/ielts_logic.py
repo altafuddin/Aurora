@@ -2,7 +2,7 @@
 
 import gradio as gr
 from .ielts_models import IELTSState, SessionPhase, IELTSFeedback
-from .prompts import create_single_part_feedback_prompt
+from .prompts import create_structured_part_feedback_prompt
 from utils.ielts_utils import format_feedback_for_display
 
 
@@ -61,6 +61,10 @@ def process_answer(user_audio, current_state: IELTSState, stt_service):
             gr.update(visible=False)
         )
     
+    # >> ADD THESE TWO DEBUGGING LINES
+    print(f"--- DEBUG: Processing Answer ---")
+    print(f"Current Question Index: {current_state.current_question_index}, Is Part Ending? {current_state.is_last_question_of_part}")
+
     # Check if it's the last question of the part BEFORE processing
     is_part_ending = current_state.is_last_question_of_part
 
@@ -111,33 +115,18 @@ def process_answer(user_audio, current_state: IELTSState, stt_service):
                 gr.update(visible=False), 
                 gr.update(visible=True)
             )
-    
-        # --- Determine the next question ---
-        next_question_text = "Test completed!"
 
-        # Part 1 Logic
-        if current_state.current_part == 1:
-            current_state.current_question_index += 1
-            part1_questions = current_state.questions["part1"]["questions"]
-            next_question_text = part1_questions[current_state.current_question_index]
-            
-        # Part 2 Logic (This is the transition from Part 1 to 2)
-        # We need to adjust the logic slightly, as this code is now only reachable
-        # after the last Part 1 question has been answered (in the previous turn).
-        # The transition logic should happen when we press "Continue".
-        # Let's simplify for now. The core logic will be in the new "continue" function.
-        
-        # The logic to transition between parts will be moved to a new function
-        # triggered by the "Continue" button. For now, we just advance the question.
+        # --- If it's not the end of a part, determine the next question ---
+        # This block will therefore primarily run for Part 1 and Part 3.
         current_state.current_question_index += 1
         part_key = f"part{current_state.current_part}"
         questions_in_part = current_state.questions[part_key]["questions"]
-        next_question_text = questions_in_part[current_state.current_question_index]
-        
+        next_question_text = questions_in_part[current_state.current_question_index]                      
         current_state.current_question_text = next_question_text       
+        
         return (
             current_state, 
-            next_question_text, 
+            f"**Part {current_state.current_part}: {current_state.questions[f'part{current_state.current_part}']['topic']}**\n\n{next_question_text}", 
             "\n\n---\n\n".join(current_state.answers),
             gr.update(visible=True),  # Show recording interface
             gr.update(visible=False)  # Hide feedback buttons after answering a question
@@ -200,7 +189,7 @@ def continue_to_next_part(current_state: IELTSState):
     else:
         # This case shouldn't be reached if the UI is controlled properly,
         # but it's good practice to handle it.
-        next_question_text = "An unexpected error occurred."
+        next_question_text = "Test Completed. Thank you for participating!"
         show_recording = False
 
     current_state.current_question_text = next_question_text
@@ -252,7 +241,13 @@ def generate_feedback(current_state: IELTSState, llm_service):
     Orchestrates the process of getting, parsing, and displaying IELTS feedback.
     """
     if not current_state.answers:
-        return "Error: No answers were provided to generate feedback."
+        # return "Error: No answers were provided to generate feedback."
+        return (
+            current_state,
+            gr.update(value="Error: No answers were provided to generate feedback.", visible=True),
+            gr.update(interactive=False, visible=True),
+            gr.update(interactive=False, visible=True)
+        )
     
     # Set the session phase to show the app is "busy"
     current_state.session_phase = SessionPhase.GENERATING_FEEDBACK
@@ -260,9 +255,9 @@ def generate_feedback(current_state: IELTSState, llm_service):
     # 1. Set a "loading" state for the UI
     yield (
         current_state, 
-        gr.update(value="Generating feedback, please wait..."), # For ielts_feedback_display
-        gr.update(interactive=False), # Disable feedback button to prevent double-clicks
-        gr.update(interactive=False)  # Disable continue button
+        gr.update(value="Generating feedback, please wait...", visible=True), # For ielts_feedback_display
+        gr.update(interactive=False, visible=True), # Disable feedback button to prevent double-clicks
+        gr.update(interactive=False, visible=True)  # Disable continue button
     )
 
     
@@ -276,7 +271,7 @@ def generate_feedback(current_state: IELTSState, llm_service):
     part_number = current_state.current_part
 
     # 3. Create the detailed, structured prompt
-    prompt = create_single_part_feedback_prompt(part_number, questions_and_answers)
+    prompt = create_structured_part_feedback_prompt(part_number, questions_and_answers)
 
     # 4. Call the LLM service to get structured feedback
     feedback_result = llm_service.get_structured_feedback(prompt)
@@ -294,9 +289,9 @@ def generate_feedback(current_state: IELTSState, llm_service):
         
         yield (
             current_state,
-            gr.update(value=report), # Show the formatted feedback
-            gr.update(interactive=True), # Re-enable feedback button
-            gr.update(interactive=True)  # Re-enable continue button
+            gr.update(value=report, visible=True), # Show the formatted feedback
+            gr.update(interactive=True, visible=True), # Re-enable feedback button
+            gr.update(interactive=True, visible=True)  # Re-enable continue button
         )
     else:
         # Reset the phase even if there's an error
@@ -305,7 +300,7 @@ def generate_feedback(current_state: IELTSState, llm_service):
         error_message = feedback_result
         yield (
             current_state,
-            gr.update(value=error_message), # Show the error message
-            gr.update(interactive=True), # Re-enable feedback button
-            gr.update(interactive=True)  # Re-enable continue button
+            gr.update(value=error_message, visible=True), # Show the error message
+            gr.update(interactive=True, visible=True), # Re-enable feedback button
+            gr.update(interactive=True, visible=True)  # Re-enable continue button
         )

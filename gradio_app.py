@@ -1,6 +1,7 @@
 # In: gradio_app.py
 
 import gradio as gr
+from functools import partial
 
 # --- Import services and models ---
 from services.stt_service import AssemblyAITranscriber
@@ -82,8 +83,8 @@ def create_gradio_interface():
                     gr.Markdown("*Speak clearly and naturally.*")
                 
                 with gr.Row(visible=False) as feedback_buttons:
-                    get_part_feedback_button = gr.Button("📊 Get Feedback for This Part", variant="primary")
-                    continue_to_next_part_button = gr.Button("➡️ Continue to Next Part", variant="secondary")
+                    get_part_feedback_button = gr.Button("📊 Get Feedback for This Part", variant="primary", scale=1, min_width=180)
+                    continue_to_next_part_button = gr.Button("➡️ Continue to Next Part", variant="secondary", scale=1, min_width=180)
 
                 # Component to display the feedback report
                 feedback_display = gr.Markdown(visible=False)
@@ -155,8 +156,8 @@ def create_gradio_interface():
 
             # click handler for the get_part_feedback_button
             get_part_feedback_button.click(
-                fn=lambda state: generate_feedback(state, llm_service),
-                inputs=[ielts_state],
+                fn=partial(generate_feedback, llm_service=llm_service),  # <-- pass the function itself, not a lambda
+                inputs=[ielts_state],  # pass all required arguments
                 outputs=[
                     ielts_state, 
                     feedback_display, 

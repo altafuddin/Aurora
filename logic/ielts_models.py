@@ -72,6 +72,9 @@ class IELTSState:
             return False
 
         try:
+            # part 2 has only one question
+            if self.current_part == 2:
+                return True
             # Construct the key for the questions dictionary, e.g., 'part1'
             part_key = f"part{self.current_part}"
             
