@@ -49,6 +49,17 @@ def start_ielts_test(question_bank):
             gr.update(visible=False)        # Hide feedback buttons on error
         )
 
+def format_transcript_text(answers_dict):
+    """Formats the user's answers for display in the UI."""
+    answer_blocks = []
+    for part_num in range(1, 4):
+        part_key = f"part{part_num}"
+        if answers_dict[part_key]:
+            block = f"--- Part {part_num} Answers ---\n" + "\n\n".join(answers_dict[part_key])
+            answer_blocks.append(block)
+
+    return "\n\n---\n\n".join(answer_blocks) if answer_blocks else ""
+
 def process_answer(user_audio, current_state: IELTSState, stt_service):
     """Processes a user's answer and determines the next state of the test."""
     # Check if test is started
@@ -60,20 +71,17 @@ def process_answer(user_audio, current_state: IELTSState, stt_service):
             gr.update(visible=True), 
             gr.update(visible=False)
         )
-    
-    # >> ADD THESE TWO DEBUGGING LINES
-    print(f"--- DEBUG: Processing Answer ---")
-    print(f"Current Question Index: {current_state.current_question_index}, Is Part Ending? {current_state.is_last_question_of_part}")
 
     # Check if it's the last question of the part BEFORE processing
     is_part_ending = current_state.is_last_question_of_part
 
     if not user_audio:
         # If no audio is provided, return the current state and question text
+        transcript_text = format_transcript_text(current_state.answers)
         return (
             current_state,
             current_state.current_question_text,
-            "\n\n---\n\n".join(current_state.answers),
+            transcript_text,
             gr.update(visible=True),
             gr.update(visible=False)
         )
@@ -89,7 +97,7 @@ def process_answer(user_audio, current_state: IELTSState, stt_service):
         )
 
     try:
-        # Transcribe the user's audio input``
+        # Transcribe the user's audio input
         transcript = stt_service.transcribe(user_audio)
         if transcript.startswith("Error:"):
             return (
@@ -100,8 +108,13 @@ def process_answer(user_audio, current_state: IELTSState, stt_service):
                 gr.update(visible=False)
             )
 
-        # Append the transcript to the answers``
-        current_state.answers.append(f"**Q:** {current_state.current_question_text}\n\n**A:** {transcript}")
+        # Append the transcript to the answers
+        part_key = f"part{current_state.current_part}"
+        formatted_answer = f"**Q:** {current_state.current_question_text}\n\n**A:** {transcript}"
+        current_state.answers[part_key].append(formatted_answer)
+
+        # Format the transcript text for display
+        transcript_text = format_transcript_text(current_state.answers)
 
         # Handle the end-of-part case and return immediately.
         if is_part_ending:
@@ -111,7 +124,7 @@ def process_answer(user_audio, current_state: IELTSState, stt_service):
             return (
                 current_state, 
                 next_question_text, 
-                "\n\n---\n\n".join(current_state.answers), 
+                transcript_text,  # Display all answers
                 gr.update(visible=False), 
                 gr.update(visible=True)
             )
@@ -125,9 +138,9 @@ def process_answer(user_audio, current_state: IELTSState, stt_service):
         current_state.current_question_text = next_question_text       
         
         return (
-            current_state, 
-            f"**Part {current_state.current_part}: {current_state.questions[f'part{current_state.current_part}']['topic']}**\n\n{next_question_text}", 
-            "\n\n---\n\n".join(current_state.answers),
+            current_state,
+            f"**Part {current_state.current_part}: {current_state.questions[f'part{current_state.current_part}']['topic']}**\n\n{next_question_text}",
+            transcript_text, # Display all answers
             gr.update(visible=True),  # Show recording interface
             gr.update(visible=False)  # Hide feedback buttons after answering a question
         )
@@ -202,24 +215,6 @@ def continue_to_next_part(current_state: IELTSState):
         gr.update(value="", visible=False)
     )
 
-# --- Feedback Functionality ---
-def get_part_feedback_dummy(current_state: IELTSState):
-    """
-    A placeholder function for the 'Get Feedback' button.
-    """
-    # Placeholder logic:
-    # 1. Set state.session_phase = SessionPhase.GENERATING_FEEDBACK
-    # 2. Call LLM Service
-    # 3. Add report to state.feedback_reports
-    # 4. Return state and gr.update() for feedback display
-    # For now, it just returns a simple message.
-    feedback_report = "Feedback generation is not implemented yet. Coming soon!"
-    
-    # We also need to hide the feedback buttons and show the continue button again
-    # or handle the next step. Let's decide the flow. For now, let's just show the message.
-    # The function needs to return values for all its outputs. Let's add a new gr.Markdown for feedback
-    return gr.update(value=feedback_report, visible=True), gr.update(visible=False)
-
 # --- Reset Functionality ---
 def reset_test():
     """Resets the UI and the state to its initial condition."""
@@ -236,18 +231,22 @@ def reset_test():
         gr.update(value="", visible=False)  # 8. feedback_display
     )
 
+# --- Generate Feedback Functionality ---
 def generate_feedback(current_state: IELTSState, llm_service):
     """
     Orchestrates the process of getting, parsing, and displaying IELTS feedback.
     """
-    if not current_state.answers:
-        # return "Error: No answers were provided to generate feedback."
-        return (
+    part_key = f"part{current_state.current_part}"
+    answers_for_part = current_state.answers[part_key]
+    # Check if there are answers for the current part
+    if not answers_for_part:
+        yield (
             current_state,
             gr.update(value="Error: No answers were provided to generate feedback.", visible=True),
             gr.update(interactive=False, visible=True),
             gr.update(interactive=False, visible=True)
         )
+        return
     
     # Set the session phase to show the app is "busy"
     current_state.session_phase = SessionPhase.GENERATING_FEEDBACK
@@ -260,14 +259,20 @@ def generate_feedback(current_state: IELTSState, llm_service):
         gr.update(interactive=False, visible=True)  # Disable continue button
     )
 
-    
+    # Check for a previously generated report for this part
+    if stored_report := current_state.feedback_reports.get(part_key):
+        print(f"LOG: Found cached feedback for {part_key}. Displaying now.")
+        report_markdown = format_feedback_for_display(stored_report)
+        yield (
+            current_state,
+            gr.update(value=report_markdown, visible=True),
+            gr.update(interactive=True),
+            gr.update(interactive=True)
+        )
+        return
+        
     # 2. Prepare data for the prompt
-    # We get the answers for the part that just ended.
-    # A more robust way would be to filter state.user_answers by part number,
-    # but for now, we assume it contains only the answers for the last part.
-    # Format the questions and answers into a single string for the prompt
-    # TODO: Filtering answer based on part
-    questions_and_answers = "\n\n".join(current_state.answers)
+    questions_and_answers = "\n\n".join(answers_for_part)
     part_number = current_state.current_part
 
     # 3. Create the detailed, structured prompt
@@ -280,7 +285,8 @@ def generate_feedback(current_state: IELTSState, llm_service):
     if isinstance(feedback_result, IELTSFeedback):
 
         # Success! We got a valid, structured feedback object.
-        current_state.feedback_reports.append(feedback_result)
+        part_key = f"part{current_state.current_part}"
+        current_state.feedback_reports[part_key] = feedback_result
 
         # Reset the phase to indicate the part has ended
         current_state.session_phase = SessionPhase.PART_ENDED

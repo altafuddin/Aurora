@@ -6,9 +6,8 @@ from enum import Enum, auto
 from pydantic import BaseModel, Field
 
 
-#  Define a SessionPhase Enum
+# Define a SessionPhase Enum
 # This creates a set of named constants to represent the session's state.
-# It's safer and more descriptive than using simple strings or booleans.
 class SessionPhase(Enum):
     IN_PROGRESS = auto()        # The user is actively answering questions
     PART_ENDED = auto()         # A part has just finished, user can get feedback or continue
@@ -16,7 +15,6 @@ class SessionPhase(Enum):
     TEST_COMPLETED = auto()     # The entire test is over
 
 # --- Pydantic Models for Structured LLM Feedback ---
-
 class FeedbackCriterion(BaseModel):
     """A model to hold the detailed feedback for a single criterion (e.g., Fluency)."""
     name: str = Field(..., description="The name of the criterion, e.g., 'Fluency and Coherence'")
@@ -53,16 +51,15 @@ class IELTSState:
     makes our code easier to read and debug.
     """
     # We define the 'fields' of our state as class attributes with type hints.
-    # This acts as our blueprint.
-    
+    # This acts as our blueprint.    
     questions: Optional[Dict[str, Any]] = None
     current_part: int = 0
     current_question_index: int = 0
     test_started: bool = False
     current_question_text: str = ""
-    answers: List[str] = field(default_factory=list)
+    answers: Dict[str, List[str]] = field(default_factory=lambda: {"part1": [], "part2": [], "part3": []})
     session_phase: SessionPhase = SessionPhase.IN_PROGRESS
-    feedback_reports: List[IELTSFeedback] = field(default_factory=list)
+    feedback_reports: Dict[str, Optional[IELTSFeedback]] = field(default_factory=lambda: {"part1": None, "part2": None, "part3": None})
 
     # This is a derived property that calculates the questions for the current part.
     @property
