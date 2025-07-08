@@ -5,7 +5,7 @@ import google.generativeai as genai
 from config import GEMINI_API_KEY
 import sys
 import json
-from logic.ielts_models import IELTSFeedback  # Import our Pydantic model
+from logic.ielts_models import IELTSFeedback, IELTSFinalReport  # Import our Pydantic models
 from pydantic import ValidationError
 
 class GeminiChat:
@@ -21,7 +21,7 @@ class GeminiChat:
         try:
             genai.configure(api_key=GEMINI_API_KEY)
             # Using Gemini 1.5 Flash for speed and cost-effectiveness
-            self.model = genai.GenerativeModel('gemini-1.5-flash')
+            self.model = genai.GenerativeModel('gemini-2.0-flash')
             print("--- Gemini Model Initialized Successfully ---")
         except Exception as e:
             print(f"Error initializing Gemini Model: {e}", file=sys.stderr)
@@ -70,8 +70,6 @@ class GeminiChat:
             raw_response_text = response.text
 
             # --- Step 1: Clean the response to isolate the JSON object ---
-            # This handles cases where the LLM might wrap the JSON in ```json ... ```
-            # or add other text. It finds the first '{' and the last '}'.
             start_index = raw_response_text.find('{')
             end_index = raw_response_text.rfind('}')
             
@@ -107,3 +105,44 @@ class GeminiChat:
             except NameError:
                 pass # response might not exist if the error was earlier
             return "Sorry, I encountered an error while generating feedback. The format of the response was not as expected."
+    
+    def get_final_report(self, prompt: str) -> IELTSFinalReport | str:
+        """
+        Gets a structured JSON response for the final report and parses it
+        into our IELTSFinalReport Pydantic model.
+        """
+        if not self.model:
+            return "Error: Gemini model is not initialized."
+
+        try:
+            # Use the same robust method as before: instruct via prompt
+            # and validate the response.
+            generation_config = genai.types.GenerationConfig(
+                temperature=0.7,
+            )
+            
+            response = self.model.generate_content(
+                prompt,
+                generation_config=generation_config
+            )
+
+            # Clean the response to find the JSON object
+            json_text = response.text[response.text.find('{'):response.text.rfind('}')+1]
+            
+            # Parse and validate the JSON against our final report model
+            # --- Step 2: Parse and validate the JSON string into our Pydantic model ---
+            print("LOG: Received response. Validating JSON...")
+            final_report_data = IELTSFinalReport.model_validate_json(json_text)
+            print("LOG: JSON validation successful.")
+            return final_report_data
+
+        except Exception as e:
+            error_message = f"Error generating or parsing final report: {e}"
+            print(error_message, file=sys.stderr)
+            try:
+                print("---RAW LLM RESPONSE (Final Report)---")
+                print(response.text)
+                print("------------------------------------")
+            except NameError:
+                pass
+            return "Sorry, I encountered an error while generating the final report."

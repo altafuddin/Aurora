@@ -14,7 +14,8 @@ from logic.ielts_logic import (
     process_answer, 
     reset_test, 
     continue_to_next_part, 
-    generate_feedback
+    generate_feedback,
+    generate_final_report
 )
 from logic.chat_logic import chat_function
 
@@ -85,6 +86,14 @@ def create_gradio_interface():
                 with gr.Row(visible=False) as feedback_buttons:
                     get_part_feedback_button = gr.Button("📊 Get Feedback for This Part", variant="primary", scale=1, min_width=180)
                     continue_to_next_part_button = gr.Button("➡️ Continue ", variant="secondary", scale=1, min_width=180)
+                
+                generate_final_report_button = gr.Button(
+                    "🏆 Generate Final Comprehensive Report",
+                    variant="primary",
+                    visible=False,
+                    scale=1,
+                    size="lg"
+                )
 
                 # Component to display the feedback report
                 feedback_display = gr.Markdown(visible=False)
@@ -150,7 +159,8 @@ def create_gradio_interface():
                     question_display, 
                     recording_interface, 
                     feedback_buttons,
-                    feedback_display
+                    feedback_display,
+                    generate_final_report_button
                 ]
             )
 
@@ -166,5 +176,14 @@ def create_gradio_interface():
                 ]
             )
 
-    return interface
+            generate_final_report_button.click(
+                fn=partial(generate_final_report, llm_service=llm_service),
+                inputs=[ielts_state],
+                outputs=[
+                    ielts_state,
+                    feedback_display,
+                    generate_final_report_button
+                ]
+            )
 
+    return interface

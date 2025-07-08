@@ -1,9 +1,9 @@
 # In: logic/ielts_logic.py
 
 import gradio as gr
-from .ielts_models import IELTSState, SessionPhase, IELTSFeedback
-from .prompts import create_structured_part_feedback_prompt
-from utils.ielts_utils import format_feedback_for_display
+from .ielts_models import IELTSState, SessionPhase, IELTSFeedback, IELTSFinalReport
+from .prompts import create_structured_part_feedback_prompt, create_final_report_prompt
+from utils.ielts_utils import format_feedback_for_display, format_transcript_text, format_prior_feedback, format_final_report_for_display  
 
 
 def start_ielts_test(question_bank):
@@ -165,14 +165,15 @@ def continue_to_next_part(current_state: IELTSState):
         return (
             current_state,
             "Error: No questions loaded. Please restart the test.",
-            "",
             gr.update(visible=False),
+            gr.update(visible=False),
+            gr.update(value="", visible=False),
             gr.update(visible=False)
         )
     
-    # Hide feedback buttons and show the recording interface
+    # Show the recording interface and hide final report button
+    generate_final_report = False
     show_recording = True
-    show_feedback_buttons = False
     
     # Logic to transition from Part 1 to Part 2
     if current_state.current_part == 1:
@@ -200,19 +201,21 @@ def continue_to_next_part(current_state: IELTSState):
         next_question_text = f"**Part 3: {part3_topic}**\n\n{first_part3_question}"
     
     else:
-        # This case shouldn't be reached if the UI is controlled properly,
-        # but it's good practice to handle it.
-        next_question_text = "Test Completed. Thank you for participating!"
+        # This block is reached after the user finishes Part 3 and clicks "Continue".
+        current_state.session_phase = SessionPhase.TEST_COMPLETED
+        next_question_text = "### Test Completed!\n\nYou have now completed all three parts of the test. Click the button below to generate your final comprehensive report."
         show_recording = False
+        generate_final_report = True
 
     current_state.current_question_text = next_question_text
     
     return (
         current_state,
-        next_question_text,
-        gr.update(visible=show_recording),
-        gr.update(visible=show_feedback_buttons),
-        gr.update(value="", visible=False)
+        next_question_text,                       # Update question_display
+        gr.update(visible=show_recording),        # Hide recording_interface
+        gr.update(visible=False),                 # Hide feedback_buttons
+        gr.update(value="", visible=False),       # Clear the feedback display
+        gr.update(visible=generate_final_report)  # Show generate_final_report_button
     )
 
 # --- Reset Functionality ---
@@ -309,4 +312,80 @@ def generate_feedback(current_state: IELTSState, llm_service):
             gr.update(value=error_message, visible=True), # Show the error message
             gr.update(interactive=True, visible=True), # Re-enable feedback button
             gr.update(interactive=True, visible=True)  # Re-enable continue button
+        )
+
+def calculate_overall_band_score(scores: list[float]) -> float:
+    """Calculates and rounds the overall band score according to IELTS rules."""
+    if not scores:
+        return 0.0
+    average = sum(scores) / len(scores)
+    # Round to the nearest 0.5
+    return round(average * 2) / 2
+
+def generate_final_report(current_state: IELTSState, llm_service):
+    """
+    Orchestrates the generation of the final, comprehensive IELTS report.
+    """
+    # --- Step 1: Caching Logic ---
+    if current_state.final_report:
+        print("LOG: Found cached final report. Displaying now.")
+        report_markdown = format_final_report_for_display(current_state.final_report)
+        yield (
+            current_state, 
+            gr.update(value=report_markdown, visible=True), 
+            gr.update(interactive=True)
+        )
+        return
+    
+    # Set the session phase to indicate the app is busy generating the final report.
+    current_state.session_phase = SessionPhase.GENERATING_FEEDBACK
+    
+    # 1. First `yield` to update the UI with a loading state.
+    yield (
+        current_state,
+        gr.update(value="⏳ Generating your final comprehensive report, please wait...", visible=True),
+        gr.update(interactive=False)
+    )
+
+    # 2. Prepare the data for the prompt using our utility functions.
+    full_transcript = format_transcript_text(current_state.answers)
+    prior_feedback = format_prior_feedback(current_state.feedback_reports)
+
+    # 3. Create the final "mega-prompt".
+    prompt = create_final_report_prompt(full_transcript, prior_feedback)
+
+    # 4. Call the LLM service.
+    final_report_result = llm_service.get_final_report(prompt)
+
+    # Reset the phase, as the process is complete.
+    current_state.session_phase = SessionPhase.TEST_COMPLETED
+
+    if isinstance(final_report_result, IELTSFinalReport):
+        # --- Step 5a (REFINEMENT): Perform our own calculation ---
+        scores_to_average = [
+            final_report_result.estimated_scores.fluency_and_coherence.score,
+            final_report_result.estimated_scores.lexical_resource.score,
+            final_report_result.estimated_scores.grammatical_range_and_accuracy.score
+        ]
+        calculated_overall_score = calculate_overall_band_score(scores_to_average)
+        
+        # Override the LLM's calculation with our reliable one.
+        final_report_result.overall_band_score = calculated_overall_score
+
+        # Success! Store and format the report.
+        current_state.final_report = final_report_result
+        report_markdown = format_final_report_for_display(final_report_result)
+
+        yield (
+            current_state,
+            gr.update(value=report_markdown, visible=True),
+            gr.update(interactive=True)
+        )
+    else:
+        # Failure. The service returned an error string.
+        error_message = final_report_result
+        yield (
+            current_state,
+            gr.update(value=error_message, visible=True),
+            gr.update(interactive=True)
         )

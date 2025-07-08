@@ -42,6 +42,38 @@ class IELTSFeedback(BaseModel):
     overall_summary: OverallSummary = Field(..., description="The overall summary of the feedback.")
     detailed_feedback: DetailedFeedback = Field(..., description="The detailed feedback for each criterion.")
 
+class HolisticSummary(BaseModel):
+    """A structured summary of the user's overall performance."""
+    strengths: str = Field(..., description="A paragraph summarizing the key strengths demonstrated across the test, citing specific examples.")
+    areas_to_improve: str = Field(..., description="A paragraph outlining the main areas for improvement with actionable suggestions.")
+
+class Score(BaseModel):
+    """A model to hold an estimated score and its justification."""
+    score: float = Field(..., description="The estimated score from 1.0 to 9.0, in 0.5 increments.")
+    justification: str = Field(..., description="A brief, data-driven justification for the assigned score.")
+    suggestion: str = Field(..., description="One single, actionable suggestion for this specific criterion.")
+
+class PronunciationFeedback(BaseModel):
+    """A model to provide feedback on pronunciation without a score."""
+    assessment: str = Field(..., description="Qualitative analysis inferred from transcript.")
+    suggestion: str = Field(..., description="One single, actionable suggestion a user can practice to improve general clarity or awareness.")
+
+class EstimatedScores(BaseModel):
+    """A container for the scores of all four criteria."""
+    fluency_and_coherence: Score
+    lexical_resource: Score
+    grammatical_range_and_accuracy: Score
+    pronunciation: PronunciationFeedback
+
+class IELTSFinalReport(BaseModel):
+    """
+    The main, top-level model for the final comprehensive test report.
+    This structure directly maps to the desired final JSON output.
+    """
+    holistic_summary: HolisticSummary
+    overall_band_score: float = Field(..., description="The overall band score, calculated as the average of the three scorable criteria (Fluency, Lexical Resource, Grammar), and rounded to the nearest 0.5 band.")
+    estimated_scores: EstimatedScores
+
 # Define the IELTSState dataclass
 @dataclass
 class IELTSState:
@@ -60,7 +92,8 @@ class IELTSState:
     answers: Dict[str, List[str]] = field(default_factory=lambda: {"part1": [], "part2": [], "part3": []})
     session_phase: SessionPhase = SessionPhase.IN_PROGRESS
     feedback_reports: Dict[str, Optional[IELTSFeedback]] = field(default_factory=lambda: {"part1": None, "part2": None, "part3": None})
-
+    final_report: Optional[IELTSFinalReport] = None
+    
     # This is a derived property that calculates the questions for the current part.
     @property
     def is_last_question_of_part(self) -> bool:
