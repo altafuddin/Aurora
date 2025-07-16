@@ -1,37 +1,76 @@
 # In: logic/chat_logic.py
-
+from typing import List
+from .chat_models import ChatTurn
 from utils.text_cleaner import clean_text_for_speech
 
-def chat_function(user_audio, chat_history_state, stt_service, llm_service, tts_service):
+def chat_function(
+    user_audio_filepath: str,
+    chat_history: List[ChatTurn],
+    speech_service,
+    llm_service,
+    tts_service
+):
     """
-    Handles the core logic for the Free Chat Mode.
-    Takes user audio, runs it through the services, and returns updates.
+    Handles the core logic for the audio-aware Natural Chat Mode.
     """
-    if user_audio is None:
-        return chat_history_state, None, chat_history_state
+    if not user_audio_filepath:
+        # No audio was recorded, return the state unchanged.
+        return chat_history, None, chat_history
 
-    # 1. Transcribe user's speech
-    user_text = stt_service.transcribe(user_audio)
-    if user_text.startswith("Error:"):
-        chat_history_state.append((user_text, None))
-        return chat_history_state, None, chat_history_state
+    # --- 1. Get Audio Analysis from Azure ---
+    assessment_result = speech_service.get_pronunciation_assessment(user_audio_filepath)
 
-    chat_history_state.append((user_text, None))
+    if not assessment_result or "error" in assessment_result:
+        # If the assessment fails, add an error message to the chat and stop.
+        error_message = assessment_result.get("error", "Audio analysis failed.")
+        chat_history.append(ChatTurn(text=f"Error: {error_message}"))
+        # We need to reformat for display even on error
+        display_history = []
+        for i in range(0, len(chat_history), 2):
+            user_msg = chat_history[i].text
+            ai_msg = chat_history[i+1].text if (i+1) < len(chat_history) else None
+            display_history.append((user_msg, ai_msg))
+        return display_history, None, chat_history
 
-    # 2. Get LLM response
-    # We reformat the history every time for the Gemini API.
-    gemini_history = []
-    for user_msg, ai_msg in chat_history_state:
-        if user_msg: gemini_history.append({'role': 'user', 'parts': [user_msg]})
-        if ai_msg: gemini_history.append({'role': 'model', 'parts': [ai_msg]})
-
-    ai_response_text = llm_service.get_response(gemini_history[:-1], gemini_history[-1]['parts'][0])
+    # --- 2. Process User's Turn ---
+    user_transcript = assessment_result.get("DisplayText", "Sorry, I couldn't understand.")
     
-    chat_history_state[-1] = (user_text, ai_response_text)
+    # Create a new ChatTurn object to store this turn's data
+    user_turn = ChatTurn(
+        text=user_transcript,
+        pronunciation_report=assessment_result # Store the full report
+    )
+    chat_history.append(user_turn)
 
-    # 3. Convert AI response to speech
-    cleaned_text = clean_text_for_speech(ai_response_text)
-    ai_audio_path = tts_service.synthesize_speech(cleaned_text)
+    # --- 3. Generate AI's Response ---
+    # Prepare text-only history for the LLM
+    text_history_for_llm = [
+        {"role": "user" if i % 2 == 0 else "model", "parts": [{"text": turn.text}]}
+        for i, turn in enumerate(chat_history)
+    ]
+    
+    ai_response_text = llm_service.get_response(
+        chat_history=text_history_for_llm[:-1], # History before user's current message
+        user_prompt=user_transcript
+    )
+    
+    # Add the AI's response to the history as a new turn
+    ai_turn = ChatTurn(text=ai_response_text)
+    chat_history.append(ai_turn)
+    
+    # --- 4. Synthesize Audio for AI's Response ---
+    # Clean the text for TTS
+    ai_response_text = clean_text_for_speech(ai_response_text)
+    ai_audio_path = tts_service.synthesize_speech(ai_response_text)
 
-    # Return all the necessary updates for the UI
-    return chat_history_state, ai_audio_path, chat_history_state
+    # --- 5. Format History for Gradio Display ---
+    # The chatbot component expects a list of (user_msg, ai_msg) tuples.
+    display_history = []
+    for i in range(0, len(chat_history), 2):
+        user_msg = chat_history[i].text
+        ai_msg = chat_history[i+1].text if (i+1) < len(chat_history) else None
+        display_history.append((user_msg, ai_msg))
+
+    if chat_history:
+      print("DEBUG: Last user turn object:", chat_history[-2])
+    return display_history, ai_audio_path, chat_history

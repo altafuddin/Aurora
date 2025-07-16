@@ -5,10 +5,12 @@ from functools import partial
 
 # --- Import services and models ---
 from services.stt_service import AssemblyAITranscriber
+from services.azure_speech_service import AzureSpeechService
 from services.llm_service import GeminiChat
 from services.tts_service import GoogleTTS
 from data.ielts_questions import IELTSQuestionBank
 from logic.ielts_models import IELTSState
+from logic.chat_models import ChatTurn
 from logic.ielts_logic import (
     start_ielts_test, 
     process_answer, 
@@ -21,6 +23,7 @@ from logic.chat_logic import chat_function
 
 # --- Initialize services and data handlers once when the app starts ---
 # These are the "global" resources our app will use.
+azure_speech_service = AzureSpeechService()
 stt_service = AssemblyAITranscriber()
 llm_service = GeminiChat()
 tts_service = GoogleTTS()
@@ -43,16 +46,18 @@ def create_gradio_interface():
             with gr.Row():
                 mic_input_chat = gr.Audio(sources=["microphone"], type="filepath", label="Speak Here")
             
-            # Learning Point: Using a 'lambda' function to pass the initialized
-            # services into our logic function. The Gradio event listener
-            # only provides the first two arguments (audio, state).
             mic_input_chat.stop_recording(
-                fn=lambda audio, history: chat_function(audio, history, stt_service, llm_service, tts_service),
+                fn=partial(
+                    chat_function,
+                    speech_service=azure_speech_service,
+                    llm_service=llm_service,
+                    tts_service=tts_service
+                ),
                 inputs=[mic_input_chat, chat_history_state],
                 outputs=[chatbot_display, ai_audio_output, chat_history_state]
             )
 
-        # --- Tab 2: IELTS Practice Mode ---``
+        # --- Tab 2: IELTS Practice Mode ---
         with gr.Tab("IELTS Practice Mode"):
             gr.Markdown("""
             ## IELTS Speaking Test Simulation

@@ -172,6 +172,6 @@ Distributed under the MIT License. See `LICENSE` for more information.
 
 ## Contact
 
-Altaf Uddin - [LinkedIn](https://www.linkedin.com/in/altaf-uddin-dev/)
+Altaf Uddin - [LinkedIn](https://www.linkedin.com/in/altaf-uddin-b443331ab/)
 
 Project Link: [https://github.com/altafuddin/aurora](https://github.com/altafuddin/aurora)
