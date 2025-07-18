@@ -4,6 +4,9 @@ import azure.cognitiveservices.speech as speechsdk
 import json
 import sys
 from config import AZURE_SPEECH_KEY, AZURE_SPEECH_REGION
+from logic.audio_models import AzurePronunciationReport
+from pydantic import ValidationError
+
 
 class AzureSpeechService:
     def __init__(self):
@@ -25,7 +28,7 @@ class AzureSpeechService:
             print(f"Error initializing Azure Speech Service: {e}", file=sys.stderr)
             self.speech_config = None
 
-    def get_pronunciation_assessment(self, audio_filepath: str) -> dict | None:
+    def get_pronunciation_assessment(self, audio_filepath: str) -> AzurePronunciationReport | None:
         """
         Performs "unscripted" pronunciation assessment on an audio file.
 
@@ -36,7 +39,7 @@ class AzureSpeechService:
             audio_filepath: The path to the user's audio file.
 
         Returns:
-            A dictionary parsed from the detailed JSON result, or None on error.
+            A parsed and validated Pydantic model.
         """
         if not self.speech_config:
             return None
@@ -74,24 +77,31 @@ class AzureSpeechService:
                 pronunciation_result_json = result.properties.get(
                     speechsdk.PropertyId.SpeechServiceResponse_JsonResult
                 )
-                # Parse the JSON string into a Python dictionary
+                # --- Use Pydantic for Validation ---
                 if pronunciation_result_json is not None:
-                    return json.loads(pronunciation_result_json)
+                    report = AzurePronunciationReport.model_validate_json(pronunciation_result_json)
+                    print("LOG: Azure response successfully parsed and validated.")
+                    return report
                 else:
                     print("ERROR: No JSON result returned from Azure Speech Service.", file=sys.stderr)
-                    return {"error": "No JSON result returned from Azure Speech Service."}
+                    return None
             elif result.reason == speechsdk.ResultReason.NoMatch:
                 print("LOG: Azure Speech could not recognize any speech.", file=sys.stderr)
-                return {"error": "No speech could be recognized."}
+                return None
             elif result.reason == speechsdk.ResultReason.Canceled:
                 cancellation_details = result.cancellation_details
                 print(f"ERROR: Azure Speech recognition canceled. Reason: {cancellation_details.reason}", file=sys.stderr)
                 if cancellation_details.reason == speechsdk.CancellationReason.Error:
                     print(f"Error details: {cancellation_details.error_details}", file=sys.stderr)
-                return {"error": "Speech recognition was canceled or failed."}
+                return None
             
             return None
 
+        # --- Correct Error Handling for Validation ---
+        except ValidationError as e:
+            print(f"FATAL ERROR: Pydantic validation failed for Azure response. The API structure may have changed. Details: {e}", file=sys.stderr)
+            return None
+        # ---------------------------------------------
         except Exception as e:
             print(f"An unexpected error occurred in AzureSpeechService: {e}", file=sys.stderr)
             return None
