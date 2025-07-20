@@ -4,9 +4,9 @@
 import google.generativeai as genai
 from config import GEMINI_API_KEY
 import sys
-import json
-from logic.ielts_models import IELTSFeedback, IELTSFinalReport  # Import our Pydantic models
+from logic.ielts_models import IELTSFeedback, IELTSFinalReport  # our Pydantic models
 from pydantic import ValidationError
+from typing import Optional
 
 class GeminiChat:
     def __init__(self):
@@ -27,13 +27,19 @@ class GeminiChat:
             print(f"Error initializing Gemini Model: {e}", file=sys.stderr)
             self.model = None
 
-    def get_response(self, chat_history: list, user_prompt: str) -> str:
+    def get_response(
+        self, 
+        full_prompt: str, 
+        chat_history: Optional[list] = None
+    ) -> str:
         """
-        Gets a response from the Gemini model based on the chat history and new prompt.
+        Gets a response from the Gemini model. This method is flexible and can handle:
+        1. A simple user_prompt for single-shot tasks.
+        2. A user_prompt with a chat_history and a system_prompt for conversations.
         
         Args:
+            full_prompt: The final, complete prompt to be sent to the model.
             chat_history: A list of previous turns in the conversation.
-            user_prompt: The user's latest message.
 
         Returns:
             The model's text response.
@@ -42,10 +48,22 @@ class GeminiChat:
             return "Error: Gemini model is not initialized."
 
         try:
-            # The chat object maintains conversation history
-            chat = self.model.start_chat(history=chat_history)
-            response = chat.send_message(user_prompt)
-            return response.text
+            # --- Build the message list in the format the API expects ---
+            messages = chat_history or []
+            messages.append({"role": "user", "parts": [{"text": full_prompt}]})
+
+            # --- Generate the content ---
+            response = self.model.generate_content(messages)
+            
+            if response and response.parts:
+                return response.text
+            # Handle cases where the response might be blocked or empty
+            elif response.prompt_feedback and str(response.prompt_feedback.block_reason) != "BlockReason.BLOCK_REASON_UNSPECIFIED":
+                error_msg = f"LLM response blocked due to: {response.prompt_feedback.block_reason}"
+                print(f"ERROR: {error_msg}", file=sys.stderr)
+                return f"Sorry, I can't respond to that. ({response.prompt_feedback.block_reason})"
+            else:
+                return "Sorry, I couldn't think of a response."
         except Exception as e:
             print(f"Error getting response from Gemini: {e}", file=sys.stderr)
             return "Sorry, I encountered an error. Could you please repeat that?"
@@ -60,7 +78,7 @@ class GeminiChat:
 
         try:
             generation_config = genai.types.GenerationConfig(
-                temperature=0.7,  # Adjust temperature for creativity vs. accuracy
+                temperature=0.75,  # Adjust temperature for creativity vs. accuracy
             )
 
             response = self.model.generate_content(

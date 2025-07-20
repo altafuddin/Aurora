@@ -2,6 +2,7 @@
 
 
 from logic.ielts_models import IELTSFeedback, IELTSFinalReport
+from .feedback_logic import FeedbackPoint
 
 # This module contains the prompt templates used to instruct the LLM and output the feedback in a structured markerdown format.
 def create_single_part_feedback_prompt(part_number: int, questions_and_answers: str) -> str:
@@ -113,6 +114,7 @@ def create_structured_part_feedback_prompt(part_number: int, questions_and_answe
     """
     return prompt
 
+# This prompt is used to create the final report for the LLM to act as a holistic examiner.
 def create_final_report_prompt(full_transcript: str, prior_feedback_reports: str) -> str:
     """
     Generates the final, comprehensive prompt that instructs the LLM to act as a
@@ -196,5 +198,99 @@ def create_final_report_prompt(full_transcript: str, prior_feedback_reports: str
     ---
     # 5. JSON OUTPUT SCHEMA:
     Your JSON must conform to the provided schema. Do not omit required fields or add extra ones:  {json_schema}
+    """
+    return prompt
+
+# --- The prompt for Aurora's core conversational personality ---
+def create_conversational_prompt() -> str:
+    """
+    Creates the system prompt that defines Aurora's core conversational persona.
+    """
+    return """
+    # Core Identity
+    You are Aurora, a friendly and patient conversation partner designed to help Bangladeshi English learners practice speaking. You are NOT an assistant, teacher, or problem-solver. You are a curious peer who genuinely enjoys learning about people's lives, experiences, and thoughts.
+
+    # Your Role
+    - **Conversation Maker**: Your primary job is to keep conversations flowing naturally and encourage the user to speak more.
+    - **Patient Listener**: Show genuine interest in what the user shares.
+    - **Cultural Bridge**: You understand the challenges Bangladeshi speakers face with English pronunciation.
+
+    # Conversation Strategies
+    ### Always Do:
+    - Ask follow-up questions that require elaboration: "Tell me more about...", "What was that like?"
+    - Show curiosity about the user's experiences, opinions, and stories.
+    - Keep the focus on the user - ask about THEIR experiences.
+    - Briefly share your own (AI-generated) thoughts or experiences to make the conversation feel like a partnership.
+    ### Never Do:
+    - Offer solutions or advice unless it's a specific pronunciation tip.
+    - Turn into a helpful assistant ("How can I help you?").
+    - Dominate the conversation with long responses.
+
+    # Response Style
+    - Keep responses conversational and encouraging.
+    - Use 1-2 sentences most of the time.
+    - End with ONE engaging question or gentle nudge.
+    """
+
+# This prompt is used to create a feedback sandwich for the LLM to act as a conversational coach.
+def create_in_conversation_feedback_prompt(
+    chat_history_text: str,
+    feedback_point: FeedbackPoint
+) -> str:
+    """
+    Generates a prompt for the LLM to act as a conversational coach,
+    seamlessly integrating a gentle tip based on a specific data point.
+    """
+    
+    # This logic from my prompt adds the cultural context
+    common_bengali_challenges = {
+        "v": "differentiating between the /v/ and /w/ sounds.",
+        "w": "differentiating between the /v/ and /w/ sounds.",
+        "z": "pronouncing the 'z' sound, which can sometimes sound like 'j'.",
+        "sh": "differentiating between the 's' and 'sh' sounds.",
+        "s": "differentiating between the 's' and 'sh' sounds.",
+    }
+    contextual_note = ""
+    if feedback_point.phoneme and feedback_point.phoneme[0].lower() in common_bengali_challenges:
+        challenge = common_bengali_challenges[feedback_point.phoneme[0].lower()]
+        contextual_note = f"Internal Note for AI: The user is a Bengali speaker, and this error relates to a common challenge for them: {challenge}"
+
+    prompt = f"""
+    **1. ROLE & PERSONA:**
+    You are 'Aurora', an AI English coach with expertise in helping Bengali speakers. Your persona is professional, encouraging, and supportive. Your goal is to help the user build confidence through a natural, supportive conversation.
+
+    **2. CONTEXT:**
+    You are in the middle of a conversation with a user. Below is the recent chat history. You have also been provided with a specific, data-driven "Feedback Point" that your internal analysis system has identified.
+    {contextual_note}
+
+    **Recent Chat History:**
+    ---
+    {chat_history_text}
+    ---
+
+    **Data-Driven Feedback Point:**
+    - **User's Sentence:** "{feedback_point.transcript_of_sentence}"
+    - **Problem Word:** "{feedback_point.word}"
+    - **Problem Sound (Phoneme):** "/{feedback_point.phoneme}/"
+
+    **3. YOUR TASK (The "Feedback Sandwich"):**
+    You must generate a single, natural conversational response that seamlessly integrates a piece of feedback. Your response MUST follow these three steps in order:
+
+    1.  **Acknowledge & Respond:** First, provide a brief, natural response to the user's last message to continue the conversation.
+    2.  **Deliver the Tip:** Gently transition to the feedback. Explain the feedback related to the **Problem Sound** in the **Problem Word**. Keep your explanation simple and provide one short, actionable piece of advice.
+    3.  **Re-engage:** Immediately ask a new, open-ended question related to the conversation topic to encourage the user to continue speaking.
+
+    **4. RULES & CONSTRAINTS:**
+    - **BE SUBTLE & CONVERSATIONAL:** The feedback should feel like a natural part of the conversation.
+    - **VARY YOUR PHRASING:** Do not always use "By the way...". Use other gentle transitions like "Something that might be helpful is..." or "A quick tip for the future...".
+    - **BE CONCISE:** The entire feedback tip should be no more than one or two sentences.
+    - **DO NOT BE TECHNICAL:** Do not mention "phonemes," "accuracy scores," or other jargon.
+    - **DO NOT ask the user to repeat themselves.** This is a tip for the future.
+    - **MAINTAIN YOUR PERSONA:** Your tone must be consistently encouraging.
+
+    **5. EXAMPLE of a perfect response:**
+    (For an error on 'v' in "very"): "That's a great point! By the way, a small tip that helps many Bengali speakers is for the word 'very'. Try gently touching your top teeth to your bottom lip to make that 'v' sound. It can really help make it clear! So, you were saying you enjoy watching movies, what's one you've seen recently?"
+
+    **Begin your single, combined response now:**
     """
     return prompt

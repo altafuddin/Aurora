@@ -40,7 +40,7 @@ def create_gradio_interface():
         
         # --- Tab 1: Free Chat Mode ---
         with gr.Tab("Free Chat Mode"):
-            chatbot_display = gr.Chatbot(label="Conversation", height=500)
+            chatbot_display = gr.Chatbot(label="Conversation", type="messages", height=500)
             ai_audio_output = gr.Audio(visible=False, autoplay=True)
             chat_history_state = gr.State([])
             with gr.Row():
