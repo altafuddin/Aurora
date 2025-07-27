@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
 from enum import Enum, auto
 from pydantic import BaseModel, Field
-
+from .audio_models import AzurePronunciationReport
 
 # Define a SessionPhase Enum
 # This creates a set of named constants to represent the session's state.
@@ -74,13 +74,21 @@ class IELTSFinalReport(BaseModel):
     overall_band_score: float = Field(..., description="The overall band score, calculated as the average of the three scorable criteria (Fluency, Lexical Resource, Grammar), and rounded to the nearest 0.5 band.")
     estimated_scores: EstimatedScores
 
+@dataclass
+class IELTSAnswer:
+    """A container for all data related to a single user answer in the IELTS test."""
+    question: str
+    transcript: str
+    # This field will hold the full, validated report from Azure.
+    pronunciation_report: AzurePronunciationReport
+    formatted_text: str
+
 # Define the IELTSState dataclass
 @dataclass
 class IELTSState:
     """
     A structured class to hold all the state information for a single
-    IELTS test session. Using a dataclass gives us type safety and
-    makes our code easier to read and debug.
+    IELTS test session. 
     """
     # We define the 'fields' of our state as class attributes with type hints.
     # This acts as our blueprint.    
@@ -89,7 +97,7 @@ class IELTSState:
     current_question_index: int = 0
     test_started: bool = False
     current_question_text: str = ""
-    answers: Dict[str, List[str]] = field(default_factory=lambda: {"part1": [], "part2": [], "part3": []})
+    answers: Dict[str, List[IELTSAnswer]] = field(default_factory=lambda: {"part1": [], "part2": [], "part3": []})
     session_phase: SessionPhase = SessionPhase.IN_PROGRESS
     feedback_reports: Dict[str, Optional[IELTSFeedback]] = field(default_factory=lambda: {"part1": None, "part2": None, "part3": None})
     final_report: Optional[IELTSFinalReport] = None

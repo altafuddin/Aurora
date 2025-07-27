@@ -4,7 +4,7 @@ import gradio as gr
 from functools import partial
 
 # --- Import services and models ---
-from services.stt_service import AssemblyAITranscriber
+# from services.stt_service import AssemblyAITranscriber
 from services.azure_speech_service import AzureSpeechService
 from services.llm_service import GeminiChat
 from services.tts_service import GoogleTTS
@@ -24,7 +24,7 @@ from logic.chat_logic import chat_function
 # --- Initialize services and data handlers once when the app starts ---
 # These are the "global" resources our app will use.
 azure_speech_service = AzureSpeechService()
-stt_service = AssemblyAITranscriber()
+# stt_service = AssemblyAITranscriber()
 llm_service = GeminiChat()
 tts_service = GoogleTTS()
 question_bank = IELTSQuestionBank()
@@ -129,7 +129,7 @@ def create_gradio_interface():
             )
             
             mic_input_ielts.stop_recording(
-                fn=lambda audio, state: process_answer(audio, state, stt_service),
+                fn=lambda audio, state: process_answer(audio, state, azure_speech_service),
                 inputs=[mic_input_ielts, ielts_state],
                 outputs=[
                     ielts_state, 

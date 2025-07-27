@@ -1,7 +1,8 @@
 # In: logic/ielts_logic.py
 
+from typing import List, Dict
 import gradio as gr
-from .ielts_models import IELTSState, SessionPhase, IELTSFeedback, IELTSFinalReport
+from .ielts_models import IELTSState, SessionPhase, IELTSFeedback, IELTSFinalReport, IELTSAnswer
 from .prompts import create_structured_part_feedback_prompt, create_final_report_prompt
 from utils.ielts_utils import format_feedback_for_display, format_transcript_text, format_prior_feedback, format_final_report_for_display  
 
@@ -49,18 +50,19 @@ def start_ielts_test(question_bank):
             gr.update(visible=False)        # Hide feedback buttons on error
         )
 
-def format_transcript_text(answers_dict):
-    """Formats the user's answers for display in the UI."""
+def format_transcript_text(answers_dict: Dict[str, List[IELTSAnswer]]) -> str:
+    """Formats the user's answers from the state for display in the UI."""
     answer_blocks = []
     for part_num in range(1, 4):
         part_key = f"part{part_num}"
         if answers_dict[part_key]:
-            block = f"--- Part {part_num} Answers ---\n" + "\n\n".join(answers_dict[part_key])
+            formatted_answers = [answer.formatted_text for answer in answers_dict[part_key]]
+            block = f"--- Part {part_num} Answers ---\n" + "\n\n".join(formatted_answers)
             answer_blocks.append(block)
 
     return "\n\n---\n\n".join(answer_blocks) if answer_blocks else ""
 
-def process_answer(user_audio, current_state: IELTSState, stt_service):
+def process_answer(user_audio, current_state: IELTSState, speech_service):
     """Processes a user's answer and determines the next state of the test."""
     # Check if test is started
     if not current_state.test_started:
@@ -98,23 +100,46 @@ def process_answer(user_audio, current_state: IELTSState, stt_service):
 
     try:
         # Transcribe the user's audio input
-        transcript = stt_service.transcribe(user_audio)
-        if transcript.startswith("Error:"):
-            return (
-                current_state,
-                current_state.current_question_text,
-                transcript,
-                gr.update(visible=True),
-                gr.update(visible=False)
-            )
+        # 1. Call the new Azure service to get the full report
+        report = speech_service.get_pronunciation_assessment(user_audio)
 
-        # Append the transcript to the answers
+        # 2. Handle errors from the service
+        if not report or report.recognition_status != "Success":
+            error_message = "Sorry, I couldn't recognize any speech. Please try again."
+            if report:
+                error_message = f"Audio Error: {report.recognition_status}"
+            # Even on error, we need to format the existing transcript for display
+            transcript_text = format_transcript_text(current_state.answers)
+            return (
+                current_state, 
+                current_state.current_question_text,
+                transcript_text, 
+                gr.update(), 
+                gr.update())
+        
+        # 3. Create and store the new IELTSAnswer object
+        transcript = report.display_text
         part_key = f"part{current_state.current_part}"
-        formatted_answer = f"**Q:** {current_state.current_question_text}\n\n**A:** {transcript}"
-        current_state.answers[part_key].append(formatted_answer)
+        
+        new_answer = IELTSAnswer(
+            question=current_state.current_question_text,
+            transcript=transcript,
+            pronunciation_report=report,
+            formatted_text=f"**Q:** {current_state.current_question_text}\n\n**A:** {transcript}"
+        )
+        # Append the transcript to the answers
+        current_state.answers[part_key].append(new_answer)
 
         # Format the transcript text for display
         transcript_text = format_transcript_text(current_state.answers)
+        if transcript_text.startswith("Error:"):
+            return (
+                current_state,
+                current_state.current_question_text,
+                transcript_text,
+                gr.update(visible=True),
+                gr.update(visible=False)
+            )
 
         # Handle the end-of-part case and return immediately.
         if is_part_ending:
@@ -275,7 +300,7 @@ def generate_feedback(current_state: IELTSState, llm_service):
         return
         
     # 2. Prepare data for the prompt
-    questions_and_answers = "\n\n".join(answers_for_part)
+    questions_and_answers = "Haven't worked on this part, cant give feedback now"  #"\n\n".join(answers_for_part) 
     part_number = current_state.current_part
 
     # 3. Create the detailed, structured prompt

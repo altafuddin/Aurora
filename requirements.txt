@@ -17,7 +17,7 @@ fastrtc==0.0.23
 # Official SDK for AssemblyAI Speech-to-Text API.
 # Official SDK for Azure Cognitive Services Speech API.
 # Provides advanced speech recognition capabilities.
-assemblyai>=0.3.2
+# assemblyai>=0.3.2
 azure-cognitiveservices-speech==1.45.0
 azure-core==1.35.0
 
