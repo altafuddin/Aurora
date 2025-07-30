@@ -6,6 +6,35 @@ from .ielts_models import IELTSState, SessionPhase, IELTSFeedback, IELTSFinalRep
 from .prompts import create_structured_part_feedback_prompt, create_final_report_prompt
 from utils.ielts_utils import format_feedback_for_display, format_transcript_text, format_prior_feedback, format_final_report_for_display  
 
+def format_answers_with_scores(answers_dict: Dict[str, List[IELTSAnswer]]) -> str:
+    """
+    Formats all user answers, including their audio scores, into a single
+    string for the LLM prompt.
+    """
+    full_transcript_blocks = []
+    
+    for part_num in range(1, 4):
+        part_key = f"part{part_num}"
+        if answers_dict[part_key]:
+            full_transcript_blocks.append(f"--- Part {part_num} Answers ---")
+            for answer in answers_dict[part_key]:
+                report = answer.pronunciation_report
+                fluency = "N/A"
+                accuracy = "N/A"
+                if report and report.primary_result:
+                    fluency = report.primary_result.assessment.fluency_score
+                    accuracy = report.primary_result.assessment.accuracy_score
+                
+                block = (
+                    f"Question: {answer.question}\n"
+                    f"Transcript: \"{answer.transcript}\"\n"
+                    f"Audio Analysis:\n"
+                    f"  - Fluency Score: {fluency}\n"
+                    f"  - Pronunciation Accuracy Score: {accuracy}"
+                )
+                full_transcript_blocks.append(block)
+    
+    return "\n\n".join(full_transcript_blocks)
 
 def start_ielts_test(question_bank):
     """Initializes a new IELTS test session."""
@@ -187,9 +216,11 @@ def continue_to_next_part(current_state: IELTSState):
 
     # Guard clause: Ensure questions is not None
     if not current_state.questions:
+        transcript_text = format_transcript_text(current_state.answers)
         return (
             current_state,
             "Error: No questions loaded. Please restart the test.",
+            transcript_text,
             gr.update(visible=False),
             gr.update(visible=False),
             gr.update(value="", visible=False),
@@ -233,10 +264,11 @@ def continue_to_next_part(current_state: IELTSState):
         generate_final_report = True
 
     current_state.current_question_text = next_question_text
-    
+    transcript_text = format_transcript_text(current_state.answers)
     return (
         current_state,
         next_question_text,                       # Update question_display
+        transcript_text,                          # Update transcripts_display
         gr.update(visible=show_recording),        # Hide recording_interface
         gr.update(visible=False),                 # Hide feedback_buttons
         gr.update(value="", visible=False),       # Clear the feedback display
@@ -373,11 +405,35 @@ def generate_final_report(current_state: IELTSState, llm_service):
     )
 
     # 2. Prepare the data for the prompt using our utility functions.
-    full_transcript = format_transcript_text(current_state.answers)
-    prior_feedback = format_prior_feedback(current_state.feedback_reports)
+    # 1. Format the detailed, answer-by-answer data string
+    answers_with_scores_str = format_answers_with_scores(current_state.answers)
+    # full_transcript = format_transcript_text(current_state.answers)
+    # 2. Format the prior qualitative feedback reports
+    prior_feedback_str = format_prior_feedback(current_state.feedback_reports)
+
+    # 3. Calculate the overall average scores as a summary
+    all_reports = [
+        answer.pronunciation_report for part in current_state.answers.values() 
+        for answer in part if answer.pronunciation_report and answer.pronunciation_report.primary_result
+    ]
+
+    if all_reports:
+        avg_fluency = sum(r.primary_result.assessment.fluency_score for r in all_reports if r.primary_result) / len(all_reports)
+        avg_accuracy = sum(r.primary_result.assessment.accuracy_score for r in all_reports if r.primary_result) / len(all_reports)
+        summary_scores_str = (
+            f"Overall Average Fluency Score: {avg_fluency:.2f}\n"
+            f"Overall Average Pronunciation Accuracy Score: {avg_accuracy:.2f}"
+        )
+    else:
+        summary_scores_str = "No audio analysis data available."
+    
 
     # 3. Create the final "mega-prompt".
-    prompt = create_final_report_prompt(full_transcript, prior_feedback)
+    prompt = create_final_report_prompt(
+        answers_with_scores=answers_with_scores_str,
+        summary_scores=summary_scores_str,
+        prior_feedback_reports=prior_feedback_str
+    )
 
     # 4. Call the LLM service.
     final_report_result = llm_service.get_final_report(prompt)
@@ -390,7 +446,8 @@ def generate_final_report(current_state: IELTSState, llm_service):
         scores_to_average = [
             final_report_result.estimated_scores.fluency_and_coherence.score,
             final_report_result.estimated_scores.lexical_resource.score,
-            final_report_result.estimated_scores.grammatical_range_and_accuracy.score
+            final_report_result.estimated_scores.grammatical_range_and_accuracy.score,
+            final_report_result.estimated_scores.pronunciation.score
         ]
         calculated_overall_score = calculate_overall_band_score(scores_to_average)
         

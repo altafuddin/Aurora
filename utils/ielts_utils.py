@@ -143,8 +143,9 @@ def format_final_report_for_display(report: IELTSFinalReport) -> str:
     - **Justification:** {scores.grammatical_range_and_accuracy.justification}
     - **Suggestion:** {scores.grammatical_range_and_accuracy.suggestion}
 
-    ### Pronunciation (Inferred)
-    - **Assessment:** {scores.pronunciation.assessment}
+    ### Pronunciation
+    - **Score:** {scores.pronunciation.score}
+    - **Justification:** {scores.pronunciation.justification}
     - **Suggestion:** {scores.pronunciation.suggestion}
     """
     return display_text

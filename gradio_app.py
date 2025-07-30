@@ -162,6 +162,7 @@ def create_gradio_interface():
                 outputs=[
                     ielts_state, 
                     question_display, 
+                    transcripts_display,
                     recording_interface, 
                     feedback_buttons,
                     feedback_display,

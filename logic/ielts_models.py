@@ -63,7 +63,7 @@ class EstimatedScores(BaseModel):
     fluency_and_coherence: Score
     lexical_resource: Score
     grammatical_range_and_accuracy: Score
-    pronunciation: PronunciationFeedback
+    pronunciation: Score
 
 class IELTSFinalReport(BaseModel):
     """
