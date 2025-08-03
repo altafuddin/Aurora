@@ -1,6 +1,6 @@
 # In: logic/audio_models.py
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional
 
 # This file defines a robust, validated structure for the JSON data
@@ -44,6 +44,13 @@ class NBestResult(BaseModel):
     assessment: PronunciationAssessmentResult = Field(alias="PronunciationAssessment")
     words: List[WordResult] = Field(alias="Words")
 
+    @field_validator('words', check_fields=True)
+    def validate_words(cls, v):
+        """Ensure words is always a list, even if missing from response"""
+        if v is None:
+            return []
+        return v
+
 # --- Top-Level Container Model ---
 class AzurePronunciationReport(BaseModel):
     """
@@ -59,6 +66,20 @@ class AzurePronunciationReport(BaseModel):
     snr: Optional[float] = Field(None, alias="SNR")
     nbest: List[NBestResult] = Field(alias="NBest")
 
+    @field_validator('recognition_status')
+    def validate_recognition_status(cls, v):
+        """Ensure we only accept successful recognition results"""
+        if v != "Success":
+            raise ValueError(f"Recognition was not successful: {v}")
+        return v
+
+    @field_validator('nbest')
+    def validate_nbest_not_empty(cls, v):
+        """Ensure NBest contains at least one result"""
+        if not v:
+            raise ValueError("NBest list cannot be empty")
+        return v
+    
     @property
     def primary_result(self) -> Optional[NBestResult]:
         """Returns the first and most confident result from the NBest list."""

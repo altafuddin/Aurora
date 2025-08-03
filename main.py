@@ -3,6 +3,8 @@
 import gradio as gr
 from fastapi import FastAPI
 from gradio_app import create_gradio_interface
+from core.logger_config import setup_logger
+setup_logger()
 
 # Create a FastAPI app instance
 app = FastAPI()
