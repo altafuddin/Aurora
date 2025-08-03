@@ -6,28 +6,22 @@ from gradio_app import create_gradio_interface
 from core.logger_config import setup_logger
 setup_logger()
 
-# Create a FastAPI app instance
-app = FastAPI()
+# Simple Gradio-only approach for HF Spaces
+import gradio as gr
+from gradio_app import create_gradio_interface
+from core.logger_config import setup_logger
+
+setup_logger()
 
 # Create the Gradio interface
 gradio_interface = create_gradio_interface()
 
-# Optional: Add an API endpoint for health check
-@app.get("/api")
-def read_root():
-    return {"status": "Aurora API is running"}
-
-# Add a redirect from root to /gradio
-@app.get("/")
-def redirect_to_gradio():
-    from fastapi.responses import RedirectResponse
-    return RedirectResponse(url="/gradio")
-
-# Mount the Gradio app at /gradio path - IMPORTANT: do this AFTER defining routes
-app = gr.mount_gradio_app(app, gradio_interface, path="/gradio")
-
-# For debugging - remove this after it works
-print("✅ Gradio interface mounted at /gradio")
-print(f"✅ Available routes:")
-for route in app.routes:
-    print(f"  - {route}")
+# Launch directly with Gradio - this works reliably on HF Spaces
+print("🚀 Starting Aurora Gradio Interface...")
+gradio_interface.launch(
+    server_name="0.0.0.0",
+    server_port=7860,
+    share=False,
+    show_error=True,
+    debug=True
+)
