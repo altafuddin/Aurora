@@ -12,10 +12,16 @@ app = FastAPI()
 # Create the Gradio interface
 gradio_interface = create_gradio_interface()
 
-# Mount the Gradio app on the FastAPI server
-app = gr.mount_gradio_app(app, gradio_interface, path="/gradio")
-
-# Optional: Add a root endpoint for API health check
+# Optional: Add an API endpoint for health check
 @app.get("/api")
 def read_root():
     return {"status": "Aurora API is running"}
+
+# Mount the Gradio app at /gradio path
+gr.mount_gradio_app(app, gradio_interface, path="/gradio")
+
+# Add a redirect from root to /gradio
+@app.get("/")
+def redirect_to_gradio():
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/gradio")
