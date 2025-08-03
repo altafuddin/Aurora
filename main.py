@@ -17,11 +17,17 @@ gradio_interface = create_gradio_interface()
 def read_root():
     return {"status": "Aurora API is running"}
 
-# Mount the Gradio app at /gradio path
-gr.mount_gradio_app(app, gradio_interface, path="/gradio")
-
 # Add a redirect from root to /gradio
 @app.get("/")
 def redirect_to_gradio():
     from fastapi.responses import RedirectResponse
     return RedirectResponse(url="/gradio")
+
+# Mount the Gradio app at /gradio path - IMPORTANT: do this AFTER defining routes
+app = gr.mount_gradio_app(app, gradio_interface, path="/gradio")
+
+# For debugging - remove this after it works
+print("✅ Gradio interface mounted at /gradio")
+print(f"✅ Available routes:")
+for route in app.routes:
+    print(f"  - {route}")
