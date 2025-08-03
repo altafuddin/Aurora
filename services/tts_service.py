@@ -3,6 +3,7 @@
 
 from google.cloud import texttospeech
 import sys
+import os
 
 class GoogleTTS:
     def __init__(self):
