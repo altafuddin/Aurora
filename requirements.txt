@@ -27,7 +27,7 @@ google-generativeai==0.4.1 # CRITICAL: Pin to a version compatible with Gradio
 
 # Official SDK for Google Cloud Text-to-Speech API.
 # Provides enterprise-grade voices and SSML support.
-google-cloud-texttospeech
+google-cloud-texttospeech==2.27.0
 
 # -- Secure Configuration Management --
 # Manages environment variables from a.env file for API keys.
@@ -39,3 +39,4 @@ python-dotenv==1.1.0
 # opencv-python-headless is for video processing, which fastrtc can handle.
 opencv-python-headless==4.11.0.86
 pydantic==2.8.0
+pydub==0.25.1  # For audio file handling

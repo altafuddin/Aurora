@@ -1,3 +1,13 @@
+---
+title: Aurora - AI English Speaking Coach
+emoji: 🌟
+colorFrom: blue
+colorTo: purple
+sdk: docker
+pinned: false
+license: mit
+app_port: 7860
+---
 # Aurora: An AI-Powered English Speaking Coach
 
 > An AI-powered application designed to help non-native speakers improve their English proficiency through a dual-mode system of structured IELTS simulation and open-ended conversational practice.
