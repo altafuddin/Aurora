@@ -6,13 +6,6 @@ from gradio_app import create_gradio_interface
 from core.logger_config import setup_logger
 setup_logger()
 
-# Simple Gradio-only approach for HF Spaces
-import gradio as gr
-from gradio_app import create_gradio_interface
-from core.logger_config import setup_logger
-
-setup_logger()
-
 # Create the Gradio interface
 gradio_interface = create_gradio_interface()
 

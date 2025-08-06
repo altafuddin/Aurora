@@ -35,8 +35,7 @@ class AzureSpeechService:
                 region=AZURE_SPEECH_REGION
             )
 
-            # Configuration to improve recognition for our target user base
-            self.speech_config.speech_recognition_language = "en-IN"            
+            self.speech_config.speech_recognition_language = "en-US"            
             
             # Enable detailed word-level timing and confidence scores
             self.speech_config.request_word_level_timestamps()
