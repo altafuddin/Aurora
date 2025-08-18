@@ -12,9 +12,9 @@ gradio_interface = create_gradio_interface()
 # Launch directly with Gradio - this works reliably on HF Spaces
 print("🚀 Starting Aurora Gradio Interface...")
 gradio_interface.launch(
-    server_name="0.0.0.0",
+    server_name="0.0.0.0",   # "127.0.0.1" - for local run
     server_port=7860,
-    share=False,
+    share=False,             # True - for local run
     show_error=True,
     debug=True
 )
