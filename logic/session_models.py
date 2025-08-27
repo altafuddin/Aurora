@@ -7,6 +7,7 @@ from typing import List, Optional
 import asyncio
 import azure.cognitiveservices.speech as speechsdk # type: ignore
 from .chat_models import ChatTurn
+from .ielts_models import IELTSState
 import threading
 
 # --- StreamingState Dataclass ---
@@ -65,7 +66,8 @@ class StreamingSessionState:
     # Existing chat functionality
     chat_history: List[ChatTurn] = field(default_factory=list)
     streaming: StreamingState = field(default_factory=StreamingState)
-    
+    ielts_test_state: Optional[IELTSState] = field(default_factory=IELTSState)  # For IELTS-specific sessions
+
     def cleanup_streaming_resources(self):
         """
         Safely stops and cleans up Azure SDK components to prevent resource leaks.

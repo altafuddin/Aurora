@@ -27,3 +27,6 @@ roughs/
 *.mp3
 
 .DS_Store
+
+# no idea what it is
+.gradio/

@@ -1,30 +1,26 @@
 # In: gradio_app.py
 
-import gradio as gr # type: ignore
-from functools import partial
-from fastrtc import Stream # type: ignore
+import gradio as gr
+# from functools import partial
+from fastrtc import Stream
 # --- Import services and models ---
 # from services.stt_service import AssemblyAITranscriber
-from services.azure_speech_service import AzureSpeechService
+# from services.azure_speech_service import AzureSpeechService
 from services.llm_service import GeminiChat
 from services.tts_service import GoogleTTS
 from services.streaming_speech_service import StreamingAudioService    
 from data.ielts_questions import IELTSQuestionBank
-from logic.ielts_models import IELTSState
-from logic.ielts_logic import (
-    start_ielts_test, 
-    process_answer, 
-    reset_test, 
-    continue_to_next_part, 
-    generate_feedback,
-    generate_final_report
-)
+# from logic.ielts_models import IELTSState
 from logic.audio_processing import AuroraStreamHandler
 from logic.streaming_handlers import start_recording_handler, stop_recording_handler
-
+from logic.ielts_handlers import (
+    start_ielts_test_handler, start_ielts_answer_handler, stop_ielts_answer_handler,
+    continue_to_next_part_handler, generate_feedback_handler,
+    generate_final_report_handler, reset_test_handler
+)
 # --- Initialize services and data handlers once when the app starts ---
 # These are the "global" resources our app will use.
-azure_speech_service = AzureSpeechService()
+# azure_speech_service = AzureSpeechService()
 streaming_speech_service = StreamingAudioService()
 # stt_service = AssemblyAITranscriber()
 llm_service = GeminiChat()
@@ -42,7 +38,9 @@ def create_gradio_interface():
     """
     with gr.Blocks(theme=gr.themes.Soft(), title="Aurora AI") as interface: # type: ignore
         gr.Markdown("# Aurora: Your AI English Speaking Coach")
-        
+        # Mount WebRTC component
+        webrtc_component = audio_stream.webrtc_component
+        webrtc_component.render()
         # --- Tab 1: Free Chat Mode ---
         with gr.Tab("Free Chat Mode"):
             # UI components
@@ -55,9 +53,9 @@ def create_gradio_interface():
                 start_button = gr.Button("🎤 Start Recording")
                 stop_button = gr.Button("⏹️ Stop Recording", visible=False)
 
-            # Mount WebRTC component
-            webrtc_component = audio_stream.webrtc_component
-            webrtc_component.render()
+            # # Mount WebRTC component
+            # webrtc_component = audio_stream.webrtc_component
+            # webrtc_component.render()
             
             # Define wrapper functions at module level (outside the Blocks context)
             def start_recording_wrapper(request: gr.Request):
@@ -68,13 +66,11 @@ def create_gradio_interface():
             # Wire up event handlers
             start_button.click(
                 fn=start_recording_wrapper,  
-                # inputs=[], # Gradio automatically provides `request` if the function signature has it
                 outputs=[start_button, stop_button, status_display]
             )
             
             stop_button.click(
                 fn=stop_recording_wrapper,
-                # inputs=[],
                 outputs=[start_button, stop_button, status_display, chatbot_display, ai_audio_output]
             )
 
@@ -91,9 +87,6 @@ def create_gradio_interface():
             Click 'Start Test' to begin a IELTS Speaking simulation set.
             """)
             
-            # >> Initialize the state component with our new dataclass
-            ielts_state = gr.State(IELTSState())
-
             with gr.Row():
                 start_button = gr.Button("🎯 Start New IELTS Test", variant="primary", size="lg")
                 reset_button = gr.Button("🔄 Reset", variant="secondary", visible=False)
@@ -102,12 +95,12 @@ def create_gradio_interface():
                 question_display = gr.Markdown("### Question will appear here")
                 
                 with gr.Column(visible=True) as recording_interface:
-                    mic_input_ielts = gr.Audio(
-                        sources=["microphone"], 
-                        type="filepath", 
-                        label="🎤 Record Your Answer"
-                    )
+                    with gr.Row():
+                        start_answer_button = gr.Button("🎤 Start Answer")
+                        stop_answer_button = gr.Button("⏹️ Stop Answer", visible=False)
                     gr.Markdown("*Speak clearly and naturally.*")
+                
+                status_display_ielts = gr.Markdown("Status: Ready to answer")
                 
                 with gr.Row(visible=False) as feedback_buttons:
                     get_part_feedback_button = gr.Button("📊 Get Feedback for This Part", variant="primary", scale=1, min_width=180)
@@ -133,84 +126,64 @@ def create_gradio_interface():
                         placeholder="Your transcribed answers will appear here..."
                     )
 
+            # Define wrapper functions at module level (outside the Blocks context)
+            def start_ielts_test_wrapper(request: gr.Request):
+                return start_ielts_test_handler(request, question_bank)
+            
+            def start_ielts_answer_wrapper(request: gr.Request):
+                return start_ielts_answer_handler(request, streaming_speech_service)
+
+            def stop_ielts_answer_wrapper(request: gr.Request):
+                return stop_ielts_answer_handler(request, streaming_speech_service)
+
+            def continue_to_next_part_wrapper(request: gr.Request):
+                return continue_to_next_part_handler(request)
+
+            def generate_feedback_wrapper(request: gr.Request):
+                # This needs to be a generator to handle the `yield`
+                yield from generate_feedback_handler(request, llm_service)
+
+            def generate_final_report_wrapper(request: gr.Request):
+                # This is also a generator
+                yield from generate_final_report_handler(request, llm_service)
+            
+            def reset_test_wrapper(request: gr.Request):
+                return reset_test_handler(request)
+
             # --- Event Listeners for IELTS Mode ---
             start_button.click(
-                fn=lambda: start_ielts_test(question_bank),
-                inputs=[],
-                outputs=[
-                    ielts_state, 
-                    start_button,
-                    reset_button, 
-                    test_interface, 
-                    question_display, 
-                    transcripts_display,
-                    recording_interface,
-                    feedback_buttons
-                ]
+                fn=start_ielts_test_wrapper,
+                outputs=[start_button, reset_button, test_interface, question_display, transcripts_display, recording_interface]
             )
             
-            mic_input_ielts.stop_recording(
-                fn=lambda audio, state: process_answer(audio, state, azure_speech_service),
-                inputs=[mic_input_ielts, ielts_state],
-                outputs=[
-                    ielts_state, 
-                    question_display, 
-                    transcripts_display, 
-                    recording_interface,
-                    feedback_buttons
-                ]
+            start_answer_button.click(
+                fn=start_ielts_answer_wrapper,
+                outputs=[start_answer_button, stop_answer_button, status_display_ielts]
+            )
+
+            stop_answer_button.click(
+                fn=stop_ielts_answer_wrapper,
+                outputs=[question_display, transcripts_display, recording_interface, feedback_buttons, start_answer_button, stop_answer_button, status_display_ielts]
             )
             
             reset_button.click(
-                fn=reset_test,
-                inputs=[],
-                outputs=[
-                    ielts_state, 
-                    start_button, 
-                    reset_button,
-                    test_interface, 
-                    question_display, 
-                    transcripts_display, 
-                    recording_interface,
-                    feedback_buttons,
-                    feedback_display
-                ]
+                fn=reset_test_wrapper,
+                outputs=[start_button, reset_button, test_interface, question_display, transcripts_display, recording_interface, feedback_buttons, feedback_display, generate_final_report_button]
             )
 
             continue_to_next_part_button.click(
-                fn=continue_to_next_part,
-                inputs=[ielts_state],
-                outputs=[
-                    ielts_state, 
-                    question_display, 
-                    transcripts_display,
-                    recording_interface, 
-                    feedback_buttons,
-                    feedback_display,
-                    generate_final_report_button
-                ]
+                fn=continue_to_next_part_wrapper,
+                outputs=[question_display, transcripts_display, recording_interface, feedback_buttons, feedback_display, generate_final_report_button]
             )
 
-            # click handler for the get_part_feedback_button
             get_part_feedback_button.click(
-                fn=partial(generate_feedback, llm_service=llm_service),
-                inputs=[ielts_state],
-                outputs=[
-                    ielts_state, 
-                    feedback_display, 
-                    get_part_feedback_button, 
-                    continue_to_next_part_button
-                ]
+                fn=generate_feedback_wrapper,
+                outputs=[feedback_display, get_part_feedback_button, continue_to_next_part_button]
             )
 
             generate_final_report_button.click(
-                fn=partial(generate_final_report, llm_service=llm_service),
-                inputs=[ielts_state],
-                outputs=[
-                    ielts_state,
-                    feedback_display,
-                    generate_final_report_button
-                ]
+                fn=generate_final_report_wrapper,
+                outputs=[feedback_display, generate_final_report_button]
             )
 
     return interface

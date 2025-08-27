@@ -40,3 +40,5 @@ python-dotenv==1.1.0
 opencv-python-headless==4.11.0.86
 pydantic==2.8.0
 pydub==0.25.1  # For audio file handling
+
+# pyngrok==7.3.0

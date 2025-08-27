@@ -1,8 +1,6 @@
 # In: logic/streaming_handlers.py
 import gradio as gr # type: ignore
 from .session_manager import session_manager
-from .session_models import StreamingSessionState
-from services.streaming_speech_service import StreamingAudioService
 from .chat_logic import chat_function, format_history_for_gradio
 
 def start_recording_handler(request: gr.Request, llm_service, tts_service, streaming_service):

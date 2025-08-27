@@ -2,7 +2,10 @@
 
 from typing import List, Dict
 import gradio as gr
+import logging
 from .ielts_models import IELTSState, SessionPhase, IELTSFeedback, IELTSFinalReport, IELTSAnswer
+from .audio_models import AzurePronunciationReport
+from .session_models import StreamingSessionState
 from .prompts import create_structured_part_feedback_prompt, create_final_report_prompt
 from utils.ielts_utils import format_feedback_for_display, format_transcript_text, format_prior_feedback, format_final_report_for_display  
 
@@ -36,48 +39,20 @@ def format_answers_with_scores(answers_dict: Dict[str, List[IELTSAnswer]]) -> st
     
     return "\n\n".join(full_transcript_blocks)
 
-def start_ielts_test(question_bank):
-    """Initializes a new IELTS test session."""
-    try:
-        test_questions = question_bank.get_random_test()
-        # Unpack the first question for immediate display
-        first_question = test_questions["part1"]["questions"][0]  
-        
-        # Create a new instance of  dataclass with initial values
-        new_state = IELTSState(
-            questions=test_questions,
-            current_part=1,
-            current_question_index=0,
-            test_started=True,
-            current_question_text=first_question,
-            session_phase=SessionPhase.IN_PROGRESS
-        )
-        
-        # The formatted question for display
-        formatted_question = f"**Part 1: {test_questions['part1']['topic']}**\n\n{first_question}"
-
-        return (
-            new_state,                      # >> Return the dataclass object as state
-            gr.update(visible=False),       # Hide "Start Test" button
-            gr.update(visible=True),        # Show the reset button
-            gr.update(visible=True),        # Show the test interface
-            formatted_question,
-            "",
-            gr.update(visible=True),         # Show recording interface
-            gr.update(visible=False)        # Ensure feedback buttons are hidden
-        )
-    except Exception as e:
-        error_message = f"Error starting test: {str(e)}"
-        return (
-            IELTSState(),                   # >> Return a default state on error
-            gr.update(visible=True),
-            gr.update(visible=False),
-            gr.update(visible=False),
-            error_message,
-            "",
-            gr.update(visible=False),
-            gr.update(visible=False)        # Hide feedback buttons on error
-        )
+def start_ielts_test(question_bank) -> IELTSState:    
+    """Creates and returns a new IELTSState object for a fresh test."""
+    test_questions = question_bank.get_random_test()
+    first_question = test_questions["part1"]["questions"][0]
+    
+    new_state = IELTSState(
+        questions=test_questions,
+        current_part=1,
+        current_question_index=0,
+        test_started=True,
+        current_question_text=first_question,
+        session_phase=SessionPhase.IN_PROGRESS
+    )
+    return new_state
 
 def format_transcript_text(answers_dict: Dict[str, List[IELTSAnswer]]) -> str:
     """Formats the user's answers from the state for display in the UI."""
@@ -91,122 +66,39 @@ def format_transcript_text(answers_dict: Dict[str, List[IELTSAnswer]]) -> str:
 
     return "\n\n---\n\n".join(answer_blocks) if answer_blocks else ""
 
-def process_answer(user_audio, current_state: IELTSState, speech_service):
-    """Processes a user's answer and determines the next state of the test."""
+def process_answer(current_state: IELTSState, report: AzurePronunciationReport):
+    """
+    Processes a new answer, adds it to the state, and updates the question index.
+    Returns the updated state.
+    """
     # Check if test is started
-    if not current_state.test_started:
-        return (
-            current_state,
-            "Please start the test first.", 
-            "", 
-            gr.update(visible=True), 
-            gr.update(visible=False)
-        )
+    if not current_state.test_started or not current_state.questions:
+        logging.error("process_answer called on an inactive or invalid test state.")
+        return current_state
 
-    # Check if it's the last question of the part BEFORE processing
-    is_part_ending = current_state.is_last_question_of_part
+    # Create and store the new IELTSAnswer object
+    transcript = report.display_text
+    part_key = f"part{current_state.current_part}"
+    
+    new_answer = IELTSAnswer(
+        question=current_state.current_question_text,
+        transcript=transcript,
+        pronunciation_report=report,
+        formatted_text=f"**Q:** {current_state.current_question_text}\n\n**A:** {transcript}"
+    )
+    # Append the transcript to the answers
+    current_state.answers[part_key].append(new_answer)
 
-    if not user_audio:
-        # If no audio is provided, return the current state and question text
-        transcript_text = format_transcript_text(current_state.answers)
-        return (
-            current_state,
-            current_state.current_question_text,
-            transcript_text,
-            gr.update(visible=True),
-            gr.update(visible=False)
-        )
-
-    # Guard clause: Ensure questions is not None
-    if not current_state.questions:
-        return (
-            current_state,
-            "Error: No questions loaded. Please restart the test.",
-            "",
-            gr.update(visible=False),
-            gr.update(visible=False)
-        )
-
-    try:
-        # Transcribe the user's audio input
-        # 1. Call the new Azure service to get the full report
-        report = speech_service.get_pronunciation_assessment(user_audio)
-
-        # 2. Handle errors from the service
-        if not report or report.recognition_status != "Success":
-            error_message = "Sorry, I couldn't recognize any speech. Please try again."
-            if report:
-                error_message = f"Audio Error: {report.recognition_status}"
-            # Even on error, we need to format the existing transcript for display
-            transcript_text = format_transcript_text(current_state.answers)
-            return (
-                current_state, 
-                current_state.current_question_text,
-                transcript_text, 
-                gr.update(), 
-                gr.update())
-        
-        # 3. Create and store the new IELTSAnswer object
-        transcript = report.display_text
-        part_key = f"part{current_state.current_part}"
-        
-        new_answer = IELTSAnswer(
-            question=current_state.current_question_text,
-            transcript=transcript,
-            pronunciation_report=report,
-            formatted_text=f"**Q:** {current_state.current_question_text}\n\n**A:** {transcript}"
-        )
-        # Append the transcript to the answers
-        current_state.answers[part_key].append(new_answer)
-
-        # Format the transcript text for display
-        transcript_text = format_transcript_text(current_state.answers)
-        if transcript_text.startswith("Error:"):
-            return (
-                current_state,
-                current_state.current_question_text,
-                transcript_text,
-                gr.update(visible=True),
-                gr.update(visible=False)
-            )
-
-        # Handle the end-of-part case and return immediately.
-        if is_part_ending:
-            current_state.session_phase = SessionPhase.PART_ENDED
-            next_question_text = f"**End of Part {current_state.current_part}**\n\nWhat would you like to do next?"
-            # Hide recording interface, show feedback buttons
-            return (
-                current_state, 
-                next_question_text, 
-                transcript_text,  # Display all answers
-                gr.update(visible=False), 
-                gr.update(visible=True)
-            )
-
-        # --- If it's not the end of a part, determine the next question ---
-        # This block will therefore primarily run for Part 1 and Part 3.
+    if not current_state.is_last_question_of_part:
         current_state.current_question_index += 1
-        part_key = f"part{current_state.current_part}"
         questions_in_part = current_state.questions[part_key]["questions"]
-        next_question_text = questions_in_part[current_state.current_question_index]                      
-        current_state.current_question_text = next_question_text       
-        
-        return (
-            current_state,
-            f"**Part {current_state.current_part}: {current_state.questions[f'part{current_state.current_part}']['topic']}**\n\n{next_question_text}",
-            transcript_text, # Display all answers
-            gr.update(visible=True),  # Show recording interface
-            gr.update(visible=False)  # Hide feedback buttons after answering a question
-        )
-        
-    except Exception as e:
-        return (
-            current_state,
-            current_state.current_question_text,
-            f"Error processing answer: {str(e)}",
-            gr.update(visible=True),
-            gr.update(visible=False)
-        )
+        current_state.current_question_text = questions_in_part[current_state.current_question_index]
+    else:
+        logging.info(f"End of Part{part_key}")
+        current_state.session_phase = SessionPhase.PART_ENDED
+        current_state.current_question_text = f"**End of Part {current_state.current_part}**"
+
+    return current_state
 
 # --- Continue to Next Part Functionality ---    
 def continue_to_next_part(current_state: IELTSState):
@@ -216,16 +108,7 @@ def continue_to_next_part(current_state: IELTSState):
 
     # Guard clause: Ensure questions is not None
     if not current_state.questions:
-        transcript_text = format_transcript_text(current_state.answers)
-        return (
-            current_state,
-            "Error: No questions loaded. Please restart the test.",
-            transcript_text,
-            gr.update(visible=False),
-            gr.update(visible=False),
-            gr.update(value="", visible=False),
-            gr.update(visible=False)
-        )
+        return current_state
     
     # Show the recording interface and hide final report button
     generate_final_report = False
@@ -234,46 +117,31 @@ def continue_to_next_part(current_state: IELTSState):
     # Logic to transition from Part 1 to Part 2
     if current_state.current_part == 1:
         current_state.current_part = 2
+        logging.info("Transitioning from Part 1 to Part 2")
         current_state.current_question_index = 0
         current_state.session_phase = SessionPhase.IN_PROGRESS
-        
-        # Prepare the Part 2 cue card
-        next_question_text = (
-            f"**Part 2**\n\n"
-            f"**Topic:** {current_state.questions['part2']['topic']}\n\n"
-            f"{current_state.questions['part2']['cue_card']}\n\n"
+        cue_card_info = current_state.questions['part2']
+        current_state.current_question_text = (
+            f"**Part 2**\n\n**Topic:** {cue_card_info['topic']}\n\n"
+            f"{cue_card_info['cue_card']}\n\n"
             f"*You have 1 minute to prepare, then speak for 1-2 minutes.*"
         )
-
     # Logic to transition from Part 2 to Part 3
     elif current_state.current_part == 2:
+        logging.info("Transitioning from Part 2 to Part 3")
         current_state.current_part = 3
         current_state.current_question_index = 0
         current_state.session_phase = SessionPhase.IN_PROGRESS
-        
-        # Prepare the first question of Part 3
-        part3_topic = current_state.questions['part3']['topic']
-        first_part3_question = current_state.questions['part3']['questions'][0]
-        next_question_text = f"**Part 3: {part3_topic}**\n\n{first_part3_question}"
-    
+        part3_info = current_state.questions['part3']
+        current_state.current_question_text = f"**Part 3: {part3_info['topic']}**\n\n{part3_info['questions'][0]}"
     else:
         # This block is reached after the user finishes Part 3 and clicks "Continue".
         current_state.session_phase = SessionPhase.TEST_COMPLETED
-        next_question_text = "### Test Completed!\n\nYou have now completed all three parts of the test. Click the button below to generate your final comprehensive report."
-        show_recording = False
-        generate_final_report = True
+        current_state.current_question_text = "### Test Completed!\n\nYou have now completed all three parts of the test. Click the button below to generate your final comprehensive report."
+        logging.info("Test Completed!")
 
-    current_state.current_question_text = next_question_text
-    transcript_text = format_transcript_text(current_state.answers)
-    return (
-        current_state,
-        next_question_text,                       # Update question_display
-        transcript_text,                          # Update transcripts_display
-        gr.update(visible=show_recording),        # Hide recording_interface
-        gr.update(visible=False),                 # Hide feedback_buttons
-        gr.update(value="", visible=False),       # Clear the feedback display
-        gr.update(visible=generate_final_report)  # Show generate_final_report_button
-    )
+
+    return current_state
 
 # --- Reset Functionality ---
 def reset_test():
