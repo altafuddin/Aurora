@@ -334,7 +334,7 @@ class StreamingAudioService:
         logging.info(f"🚀 [{session_state.streaming.webrtc_id}] Starting OPTIMIZED audio consumer")
         
         # CHANGE 1: Larger chunk size for better Azure performance
-        target_samples = int(16000 * 0.2)  # 200ms chunks - optimal for Azure
+        target_samples = int(16000 * 0.5)  # 200ms chunks - optimal for Azure
         
         # CHANGE 2: Add batching variables
         batch_buffer = []

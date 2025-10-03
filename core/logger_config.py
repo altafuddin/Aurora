@@ -28,6 +28,6 @@ def setup_logger():
     logger.addHandler(handler)
     
     # Set the logging level
-    logger.setLevel(logging.INFO) # Change to logging.DEBUG for more verbose output
+    logger.setLevel(logging.DEBUG) # Change to logging.DEBUG for more verbose output
 
     logging.info("Logger configured successfully with timestamps.")
