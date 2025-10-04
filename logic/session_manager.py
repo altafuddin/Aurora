@@ -13,19 +13,19 @@ class SessionManager:
     def get_or_create_session(self, session_hash: str) -> StreamingSessionState:
         with self._lock:
             if session_hash not in self._sessions:
-                logging.info(f"🆕 Creating NEW session for {session_hash}")
+                logging.info(f"Creating NEW session for {session_hash}")
                 self._sessions[session_hash] = StreamingSessionState()
             else:
-                logging.info(f"♻️ Reusing session for {session_hash} with {len(self._sessions[session_hash].chat_history)} turns")
+                logging.info(f"Reusing session for {session_hash} with {len(self._sessions[session_hash].chat_history)} turns")
             return self._sessions[session_hash]
     
     def create_session(self, session_hash: str) -> StreamingSessionState:
         with self._lock:
             if session_hash not in self._sessions:
-                logging.warning(f"🆕 Creating NEW session for {session_hash} - chat history will be lost!")
+                logging.warning(f"Creating NEW session for {session_hash} - chat history will be lost!")
                 self._sessions[session_hash] = StreamingSessionState()
             else:
-                logging.info(f"♻️ Reusing existing session for {session_hash} with {len(self._sessions[session_hash].chat_history)} turns")
+                logging.info(f"Reusing existing session for {session_hash} with {len(self._sessions[session_hash].chat_history)} turns")
             return self._sessions[session_hash]
 
     def get_session(self, session_hash: str) -> StreamingSessionState | None:
