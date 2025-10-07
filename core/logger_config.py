@@ -28,6 +28,11 @@ def setup_logger():
     logger.addHandler(handler)
     
     # Set the logging level
-    logger.setLevel(logging.DEBUG) # Change to logging.DEBUG for more verbose output
+    logger.setLevel(logging.INFO) # Change to logging.DEBUG for more verbose output
+
+    # ✨ NEW: Silence the noisy WebRTC loggers
+    logging.getLogger('aioice').setLevel(logging.WARNING)
+    logging.getLogger('aiortc').setLevel(logging.WARNING)
+    logging.getLogger('av').setLevel(logging.WARNING)
 
     logging.info("Logger configured successfully with timestamps.")

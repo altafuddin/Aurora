@@ -81,7 +81,7 @@ def start_ielts_answer_handler(request: gr.Request, streaming_service):
             gr.update(visible=False), # stop answer button
             "Error: IELTS test is not in progress." # status display
         )
-    logging.info(f"[{session_hash}] Session state: {session_state.ielts_test_state}")
+    logging.info(f"[{session_hash}] Session state: {session_state.ielts_test_state.current_part}")
 
     # Set a unique ID for logging context
     session_state.streaming.webrtc_id = f"{session_hash}-ielts"
@@ -90,7 +90,7 @@ def start_ielts_answer_handler(request: gr.Request, streaming_service):
     
     # Update the UI to show that recording is active
     if success:
-        logging.info(f"[{session_hash}] Recording started: {session_state.streaming.is_recording} And State: {session_state.ielts_test_state}")
+        logging.info(f"[{session_hash}] Recording started: {session_state.streaming.is_recording} And State: {session_state.ielts_test_state.current_part}")
         return (
             gr.update(visible=False), # start answer button
             gr.update(visible=True),  # stop answer button
