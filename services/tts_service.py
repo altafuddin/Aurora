@@ -6,6 +6,8 @@ import sys
 import os
 import tempfile
 import uuid
+import time
+import logging
 
 class GoogleTTS:
     def __init__(self):
@@ -42,7 +44,10 @@ class GoogleTTS:
         if not self.client:
             return None
 
+        char_count = len(text)
+        start_time = time.time()
         try:
+            logging.info(f"API: GoogleTTS.synthesize_speech | status=starting | chars={char_count}")
             # If no output path specified, create a unique temp file
             if output_filepath is None:
                 # Create unique filename in /tmp directory
@@ -62,9 +67,13 @@ class GoogleTTS:
             with open(output_filepath, "wb") as out:
                 out.write(response.audio_content)
             
+            elapsed = time.time() - start_time
+            logging.info(f"API: GoogleTTS.synthesize_speech | status=success | duration={elapsed:.2f}s | chars={char_count}")
             print(f"✅ TTS audio saved to: {output_filepath}")
             return output_filepath
             
         except Exception as e:
+            elapsed = time.time() - start_time
+            logging.error(f"API: GoogleTTS.synthesize_speech | status=error | duration={elapsed:.2f}s | chars={char_count} | error={str(e)}")
             print(f"Error during speech synthesis: {e}", file=sys.stderr)
             return None

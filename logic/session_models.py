@@ -67,6 +67,7 @@ class StreamingSessionState:
     chat_history: List[ChatTurn] = field(default_factory=list)
     streaming: StreamingState = field(default_factory=StreamingState)
     ielts_test_state: Optional[IELTSState] = field(default_factory=IELTSState)  # For IELTS-specific sessions
+    created_at: float = field(default_factory=time.time)
 
     def cleanup_streaming_resources(self):
         """
@@ -77,7 +78,7 @@ class StreamingSessionState:
         if self.streaming.recognizer:
             try:
                 # Stop recognition and disconnect callbacks to prevent memory leaks
-                self.streaming.recognizer.stop_continuous_recognition()
+                self.streaming.recognizer.stop_continuous_recognition_async().get()
                 cleanup_timeout = threading.Timer(5.0, lambda: logging.warning("Recognizer cleanup timeout"))
                 cleanup_timeout.start()
                 try:

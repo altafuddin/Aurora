@@ -1,5 +1,6 @@
 # In: logic/chat_logic.py
 import logging
+import time
 from typing import List, Optional, Tuple
 from .chat_models import ChatTurn
 from .session_models import StreamingSessionState
@@ -47,6 +48,7 @@ def chat_function(
             - ai_audio_path: Path to the synthesized AI response audio.
             - updated session_state: The updated StreamingSessionState.
     """
+    start_time = time.time()
     if not pronunciation_report or not user_transcript:
         # Reformat history for display even if there's no valid input
         display_history = format_history_for_gradio(session_state.chat_history)
@@ -142,4 +144,6 @@ def chat_function(
     # --- 6. Format Final History for Gradio Display ---
     display_history = format_history_for_gradio(session_state.chat_history)
 
+    elapsed = time.time() - start_time
+    logging.info(f"TIMING: chat_function completed in {elapsed:.2f}s")
     return display_history, ai_audio_path, session_state

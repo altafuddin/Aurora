@@ -3,6 +3,7 @@
 from typing import List, Dict
 import gradio as gr
 import logging
+import time
 from .ielts_models import IELTSState, SessionPhase, IELTSFeedback, IELTSFinalReport, IELTSAnswer
 from .audio_models import AzurePronunciationReport
 from .session_models import StreamingSessionState
@@ -164,6 +165,7 @@ def generate_feedback(current_state: IELTSState, llm_service):
     """
     Orchestrates the process of getting, parsing, and displaying IELTS feedback.
     """
+    start_time = time.time()
     part_key = f"part{current_state.current_part}"
     answers_for_part = current_state.answers[part_key]
     # Check if there are answers for the current part
@@ -227,6 +229,8 @@ def generate_feedback(current_state: IELTSState, llm_service):
             gr.update(interactive=True, visible=True), # Re-enable feedback button
             gr.update(interactive=True, visible=True)  # Re-enable continue button
         )
+        elapsed = time.time() - start_time
+        logging.info(f"TIMING: generate_feedback completed in {elapsed:.2f}s")
     else:
         # Reset the phase even if there's an error
         current_state.session_phase = SessionPhase.PART_ENDED
@@ -251,6 +255,7 @@ def generate_final_report(current_state: IELTSState, llm_service):
     """
     Orchestrates the generation of the final, comprehensive IELTS report.
     """
+    start_time = time.time()
     # --- Step 1: Caching Logic ---
     if current_state.final_report:
         print("LOG: Found cached final report. Displaying now.")
@@ -331,6 +336,8 @@ def generate_final_report(current_state: IELTSState, llm_service):
             gr.update(value=report_markdown, visible=True),
             gr.update(interactive=True)
         )
+        elapsed = time.time() - start_time
+        logging.info(f"TIMING: generate_final_report completed in {elapsed:.2f}s")
     else:
         # Failure. The service returned an error string.
         error_message = final_report_result

@@ -1,5 +1,6 @@
 # In: logic/session_manager.py
 import threading
+import time
 import logging
 from typing import Dict, List
 from .session_models import StreamingSessionState
@@ -15,6 +16,7 @@ class SessionManager:
             if session_hash not in self._sessions:
                 logging.info(f"Creating NEW session for {session_hash}")
                 self._sessions[session_hash] = StreamingSessionState()
+                logging.info(f"METRICS: active_sessions={len(self._sessions)} (context: session created)")
             else:
                 logging.info(f"Reusing session for {session_hash} with {len(self._sessions[session_hash].chat_history)} turns")
             return self._sessions[session_hash]
@@ -50,6 +52,26 @@ class SessionManager:
         with self._lock:
             if session_hash in self._sessions:
                 del self._sessions[session_hash]
+                logging.info(f"METRICS: active_sessions={len(self._sessions)} (context: session removed)")
+
+    def cleanup_old_sessions(self, max_age_seconds: int = 3600):
+        """Remove sessions older than max_age_seconds"""
+        with self._lock:
+            current_time = time.time()
+            to_remove = []
+            for session_hash, session in self._sessions.items():
+                if current_time - session.created_at > max_age_seconds:
+                    to_remove.append(session_hash)
+            
+            for session_hash in to_remove:
+                logging.info(f"Cleaning up old session: {session_hash}")
+                # Ensure resources are cleaned up before removing
+                if self._sessions[session_hash]:
+                     self._sessions[session_hash].cleanup_streaming_resources()
+                del self._sessions[session_hash]
+            
+            if to_remove:
+                logging.info(f"METRICS: active_sessions={len(self._sessions)} (context: {len(to_remove)} old sessions cleaned up)")
 
 # Create the single, global instance
 session_manager = SessionManager()

@@ -4,6 +4,8 @@
 import google.generativeai as genai
 from config import GEMINI_API_KEY
 import sys
+import time
+import logging
 from logic.ielts_models import IELTSFeedback, IELTSFinalReport  # our Pydantic models
 from pydantic import ValidationError
 from typing import Optional
@@ -47,13 +49,26 @@ class GeminiChat:
         if not self.model:
             return "Error: Gemini model is not initialized."
 
+        start_time = time.time()
         try:
+            logging.info(f"API: Gemini.generate_content | status=starting")
             # --- Build the message list in the format the API expects ---
             messages = chat_history or []
             messages.append({"role": "user", "parts": [{"text": full_prompt}]})
 
             # --- Generate the content ---
             response = self.model.generate_content(messages)
+            elapsed = time.time() - start_time
+            
+            # Try to get token count if available
+            token_info = ""
+            try:
+                if hasattr(response, 'usage_metadata') and response.usage_metadata:
+                    token_info = f" | tokens={response.usage_metadata.total_token_count}"
+            except:
+                pass
+            
+            logging.info(f"API: Gemini.generate_content | status=success | duration={elapsed:.2f}s{token_info}")
             
             if response and response.parts:
                 return response.text
@@ -65,6 +80,8 @@ class GeminiChat:
             else:
                 return "Sorry, I couldn't think of a response."
         except Exception as e:
+            elapsed = time.time() - start_time
+            logging.error(f"API: Gemini.generate_content | status=error | duration={elapsed:.2f}s | error={str(e)}")
             print(f"Error getting response from Gemini: {e}", file=sys.stderr)
             return "Sorry, I encountered an error. Could you please repeat that?"
         
@@ -76,7 +93,9 @@ class GeminiChat:
         if not self.model:
             return "Error: Gemini model is not initialized."
 
+        start_time = time.time()
         try:
+            logging.info(f"API: Gemini.get_structured_feedback | status=starting")
             generation_config = genai.types.GenerationConfig(
                 temperature=0.75,  # Adjust temperature for creativity vs. accuracy
             )
@@ -103,6 +122,8 @@ class GeminiChat:
             feedback_data = IELTSFeedback.model_validate_json(json_string)
             print("LOG: JSON validation successful.")
             
+            elapsed = time.time() - start_time
+            logging.info(f"API: Gemini.get_structured_feedback | status=success | duration={elapsed:.2f}s")
             return feedback_data
 
         except ValidationError as e:
@@ -122,6 +143,9 @@ class GeminiChat:
                 print("------------------------")
             except NameError:
                 pass # response might not exist if the error was earlier
+            
+            elapsed = time.time() - start_time
+            logging.error(f"API: Gemini.get_structured_feedback | status=error | duration={elapsed:.2f}s")
             return "Sorry, I encountered an error while generating feedback. The format of the response was not as expected."
     
     def get_final_report(self, prompt: str) -> IELTSFinalReport | str:
@@ -132,7 +156,9 @@ class GeminiChat:
         if not self.model:
             return "Error: Gemini model is not initialized."
 
+        start_time = time.time()
         try:
+            logging.info(f"API: Gemini.get_final_report | status=starting")
             # Use the same robust method as before: instruct via prompt
             # and validate the response.
             generation_config = genai.types.GenerationConfig(
@@ -152,6 +178,9 @@ class GeminiChat:
             print("LOG: Received response. Validating JSON...")
             final_report_data = IELTSFinalReport.model_validate_json(json_text)
             print("LOG: JSON validation successful.")
+            
+            elapsed = time.time() - start_time
+            logging.info(f"API: Gemini.get_final_report | status=success | duration={elapsed:.2f}s")
             return final_report_data
 
         except Exception as e:
@@ -163,4 +192,7 @@ class GeminiChat:
                 print("------------------------------------")
             except NameError:
                 pass
+            
+            elapsed = time.time() - start_time
+            logging.error(f"API: Gemini.get_final_report | status=error | duration={elapsed:.2f}s")
             return "Sorry, I encountered an error while generating the final report."

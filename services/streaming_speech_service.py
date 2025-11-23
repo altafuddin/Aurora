@@ -90,6 +90,8 @@ class StreamingAudioService:
                 """Handle finalized utterances with enhanced processing"""
                 if evt.result.reason == speechsdk.ResultReason.RecognizedSpeech:
                     utterance = evt.result.text.strip()
+                    fragment_count = len(session_state.streaming.session_transcript_fragments)
+                    logging.info(f"API: Azure.fragment_received | status=success | fragment_num={fragment_count + 1}")
                     logging.info(f"[{session_state.streaming.webrtc_id}] RECOGNIZED: '{utterance}'")
                     
                     if utterance:
@@ -142,6 +144,7 @@ class StreamingAudioService:
         """
         Start recording with enhanced retry logic and resource management
         """
+        start_time = time.time()
         session_state.streaming.retry_count = 0
         
         for attempt in range(session_state.streaming.max_retries + 1):
@@ -149,8 +152,15 @@ class StreamingAudioService:
                 # Setup recognizer with enhanced configuration
                 if self.setup_azure_recognizer(session_state):
                     # Start Azure recognition
+                    api_start = time.time()
+                    logging.info(f"API: Azure.start_continuous_recognition | status=starting")
                     session_state.streaming.recognizer.start_continuous_recognition() # type: ignore
+                    api_duration = time.time() - api_start
+                    logging.info(f"API: Azure.start_continuous_recognition | status=success | duration={api_duration:.2f}s")
+                    
+                    logging.info(f"STATE: is_recording changed from False to True")
                     session_state.streaming.is_recording = True
+                    logging.info(f"STATE: is_active changed from False to True")
                     session_state.streaming.is_active = True
                     # Initialize session timing and counters (from your service)
                     session_state.streaming.recording_start_time = time.time()
@@ -167,7 +177,9 @@ class StreamingAudioService:
                     # Start enhanced audio consumer thread
                     self._start_consumer_thread(session_state)
 
+                    elapsed = time.time() - start_time
                     logging.info(f"[{session_state.streaming.webrtc_id}] Recording started (attempt {attempt + 1})")
+                    logging.info(f"TIMING: start_recording completed in {elapsed:.2f}s")
                     return True, "Recording started..."
                 
             except Exception as e:
@@ -191,6 +203,7 @@ class StreamingAudioService:
         """
         Stop recording and consolidate results using enhanced fragment processing
         """
+        start_time = time.time()
         try:
             if not session_state.streaming.is_recording:
                 logging.warning(f"[{session_state.streaming.webrtc_id}] Stop called but not recording")
@@ -204,8 +217,13 @@ class StreamingAudioService:
             
             # Stop Azure recognition and cleanup (your service's approach)
             if session_state.streaming.recognizer:
+                api_start = time.time()
+                logging.info(f"API: Azure.stop_continuous_recognition | status=starting")
                 session_state.streaming.recognizer.stop_continuous_recognition()
+                api_duration = time.time() - api_start
+                logging.info(f"API: Azure.stop_continuous_recognition | status=success | duration={api_duration:.2f}s")
             
+            logging.info(f"STATE: is_recording changed from True to False")
             session_state.streaming.is_recording = False
             
             # Enhanced fragment consolidation from your service
@@ -215,11 +233,15 @@ class StreamingAudioService:
                 # Build transcript from validated pronunciation report
                 final_transcript = pronunciation_report.display_text
                 logging.info(f"[{session_state.streaming.webrtc_id}] Session finalized: '{final_transcript}'")
+                elapsed = time.time() - start_time
+                logging.info(f"TIMING: stop_recording completed in {elapsed:.2f}s")
                 return True, final_transcript, pronunciation_report
             else:
                 # Fallback to partial results if available
                 partial_transcript = session_state.streaming.current_utterance_buffer or "(No speech detected)"
                 logging.warning(f"[{session_state.streaming.webrtc_id}] No validated results, using partial: '{partial_transcript}'")
+                elapsed = time.time() - start_time
+                logging.info(f"TIMING: stop_recording completed in {elapsed:.2f}s")
                 return False, partial_transcript, None
                 
         except Exception as e:
@@ -231,12 +253,14 @@ class StreamingAudioService:
             # Always cleanup resources
             session_state.cleanup_streaming_resources()
             # ADD: Signal that session can be removed
+            logging.info(f"STATE: is_active changed from True to False")
             session_state.streaming.is_active = False
 
     def _consolidate_results(self, session_state: StreamingSessionState) -> Optional[AzurePronunciationReport]:
         """
         Smart consolidation of recognition fragments using your service's logic
         """
+        start_time = time.time()
         fragments = session_state.streaming.session_transcript_fragments
         if not fragments:
             logging.warning(f"[{session_state.streaming.webrtc_id}] No speech fragments to consolidate")
@@ -283,7 +307,10 @@ class StreamingAudioService:
             final_json_string = json.dumps(final_fragment)
             validated_report = AzurePronunciationReport.model_validate_json(final_json_string)
 
+            elapsed = time.time() - start_time
             logging.info(f"[{session_state.streaming.webrtc_id}] Successfully consolidated {len(fragments)} fragments with {len(all_words)} total words")
+            logging.info(f"METRICS: fragments_consolidated={len(fragments)} total_words={len(all_words)} (context: consolidation)")
+            logging.info(f"TIMING: _consolidate_results completed in {elapsed:.2f}s")
             return validated_report
 
         except ValidationError as e:
@@ -331,6 +358,7 @@ class StreamingAudioService:
         3. Implemented queue pressure relief to prevent backing up
         4. Added performance monitoring and adaptive processing
         """
+        start_time = time.time()
         logging.info(f"[{session_state.streaming.webrtc_id}] Starting OPTIMIZED audio consumer")
         
         # CHANGE 1: Larger chunk size for better Azure performance
@@ -483,8 +511,10 @@ class StreamingAudioService:
                 except Exception as e:
                     logging.error(f"Error processing final batch: {e}")
 
+            elapsed = time.time() - start_time
             logging.info(f"[{session_state.streaming.webrtc_id}] OPTIMIZED audio consumer stopped")
             logging.info(f"Final stats: {performance_stats}")
+            logging.info(f"TIMING: _consume_audio_loop completed in {elapsed:.2f}s")
 
     # CHANGE 10: Add new optimized buffer processing method
     async def _process_audio_buffer_optimized(self, session_state: StreamingSessionState, target_samples: int, force_flush: bool = False):

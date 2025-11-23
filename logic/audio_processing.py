@@ -16,6 +16,10 @@ class AuroraStreamHandler(StreamHandler):
     Stateless handler that routes incoming audio to the correct session's queue
     by looking up the active session in the global session manager.
     """
+    def __init__(self):
+        super().__init__()
+        self.chunk_counter = 0
+    
     def receive(self, frame):
         sr, audio_arr = frame
         
@@ -64,6 +68,12 @@ class AuroraStreamHandler(StreamHandler):
                 # 6. Enqueue processed audio
                 try:
                     session_state.streaming.audio_queue.put_nowait(audio_data.tolist())
+                    self.chunk_counter += 1
+                    
+                    # Log every 10th chunk with queue size
+                    if self.chunk_counter % 10 == 0:
+                        logging.debug(f"METRICS: audio_chunks_received={self.chunk_counter} queue_size={queue_size + 1} (context: audio_processing)")
+                    
                     # logging.debug(f"Queued {len(audio_data)} samples from {sr}Hz (queue: {session_state.streaming.audio_queue.qsize()})")
 
                     if queue_size > 30 and queue_size % 5 == 0:
@@ -79,4 +89,6 @@ class AuroraStreamHandler(StreamHandler):
         return None
     
     def copy(self):
-        return AuroraStreamHandler()
+        new_handler = AuroraStreamHandler()
+        new_handler.chunk_counter = 0
+        return new_handler
