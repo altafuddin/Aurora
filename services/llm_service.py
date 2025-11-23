@@ -65,8 +65,10 @@ class GeminiChat:
             try:
                 if hasattr(response, 'usage_metadata') and response.usage_metadata:
                     token_info = f" | tokens={response.usage_metadata.total_token_count}"
-            except:
-                pass
+            except (AttributeError, TypeError) as e:
+                # Silently ignore if token metadata is unavailable or has unexpected structure
+                logging.debug(f"Could not extract token count from response: {e}")
+
             
             logging.info(f"API: Gemini.generate_content | status=success | duration={elapsed:.2f}s{token_info}")
             
