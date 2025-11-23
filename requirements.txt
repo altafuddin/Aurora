@@ -42,3 +42,5 @@ pydantic==2.8.0
 pydub==0.25.1  # For audio file handling
 
 # pyngrok==7.3.0
+scipy == 1.15.3
+numpy == 2.2.6

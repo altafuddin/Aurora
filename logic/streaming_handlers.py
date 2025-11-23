@@ -38,7 +38,7 @@ def stop_recording_handler(request: gr.Request, llm_service, tts_service, stream
             tts_service=tts_service
         )
         # Let the service handle cleanup timing
-        # session_manager.remove_session(session_hash)
+        session_manager.remove_session(session_hash)
         return gr.update(visible=True), gr.update(visible=False), "Ready to record", display_history, ai_audio_path
     else:
         session_manager.remove_session(session_hash)

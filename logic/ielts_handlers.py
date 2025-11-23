@@ -26,6 +26,7 @@ def start_ielts_test_handler(request: gr.Request, question_bank):
         # Create a new, fresh IELTS test state
         new_ielts_state = start_ielts_test(question_bank)
         session_state.ielts_test_state = new_ielts_state
+        logging.info(f"STATE: IELTS test started | part=1 | question_index=0 | phase={SessionPhase.IN_PROGRESS}")
         if not new_ielts_state or not new_ielts_state.current_question_text:
             return (
                 gr.update(visible=True),  # Show Start button
@@ -81,7 +82,7 @@ def start_ielts_answer_handler(request: gr.Request, streaming_service):
             gr.update(visible=False), # stop answer button
             "Error: IELTS test is not in progress." # status display
         )
-    logging.info(f"[{session_hash}] Session state: {session_state.ielts_test_state}")
+    logging.info(f"[{session_hash}] Session state: {session_state.ielts_test_state.current_part}")
 
     # Set a unique ID for logging context
     session_state.streaming.webrtc_id = f"{session_hash}-ielts"
@@ -90,7 +91,7 @@ def start_ielts_answer_handler(request: gr.Request, streaming_service):
     
     # Update the UI to show that recording is active
     if success:
-        logging.info(f"[{session_hash}] Recording started: {session_state.streaming.is_recording} And State: {session_state.ielts_test_state}")
+        logging.info(f"[{session_hash}] Recording started: {session_state.streaming.is_recording} And State: {session_state.ielts_test_state.current_part}")
         return (
             gr.update(visible=False), # start answer button
             gr.update(visible=True),  # stop answer button
@@ -146,6 +147,9 @@ def stop_ielts_answer_handler(request: gr.Request, streaming_service):
     # --- 2. Call our refactored core IELTS logic function ---
     # The `process_answer` function will handle the state updates and determine the next UI state.
     updated_ielts_state = process_answer(session_state.ielts_test_state, report)
+    
+    # Log state transition
+    logging.info(f"STATE: IELTS answer processed | part={updated_ielts_state.current_part} | question_index={updated_ielts_state.current_question_index} | phase={updated_ielts_state.session_phase}")
 
     # Update the main session state with the new IELTS state
     session_state.ielts_test_state = updated_ielts_state
@@ -183,6 +187,9 @@ def continue_to_next_part_handler(request: gr.Request):
     # Call the pure logic function
     updated_ielts_state = continue_to_next_part(session_state.ielts_test_state) #type: ignore
     session_state.ielts_test_state = updated_ielts_state
+    
+    # Log state transition
+    logging.info(f"STATE: IELTS part transition | part={updated_ielts_state.current_part} | question_index={updated_ielts_state.current_question_index} | phase={updated_ielts_state.session_phase}")
 
     full_transcript_display = format_transcript_text(updated_ielts_state.answers)
     is_test_over = updated_ielts_state.session_phase == SessionPhase.TEST_COMPLETED

@@ -4,8 +4,8 @@ import sys
 
 def setup_logger():
     """
-    Forcefully configures the root logger to use a specific format with timestamps.
-    This clears any handlers previously set by libraries like Uvicorn or Gradio.
+    Set up the root logger with a timestamped format and 
+    DEBUG level, replacing any existing handlers.
     """
     # Get the root logger
     logger = logging.getLogger()
@@ -29,5 +29,10 @@ def setup_logger():
     
     # Set the logging level
     logger.setLevel(logging.INFO) # Change to logging.DEBUG for more verbose output
+
+    # ✨ NEW: Silence the noisy WebRTC loggers
+    logging.getLogger('aioice').setLevel(logging.WARNING)
+    logging.getLogger('aiortc').setLevel(logging.WARNING)
+    logging.getLogger('av').setLevel(logging.WARNING)
 
     logging.info("Logger configured successfully with timestamps.")

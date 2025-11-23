@@ -133,7 +133,7 @@ class AzureSpeechService:
                     
                     if self._validate_result_structure(result_data):
                         report = AzurePronunciationReport.model_validate_json(json.dumps(result_data))
-                        logging.info("✅ Single recognition completed successfully")
+                        logging.info("Single recognition completed successfully")
                         return report
                     else:
                         logging.error("Result structure validation failed")
@@ -182,7 +182,7 @@ class AzureSpeechService:
 
             # Combine all chunk results into a single report
             combined_result = self._combine_chunk_results(chunk_results)
-            logging.info(f"✅ Successfully combined {len(chunk_results)} chunks")
+            logging.info(f"Successfully combined {len(chunk_results)} chunks")
             return combined_result
 
         except Exception as e:

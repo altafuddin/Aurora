@@ -50,10 +50,10 @@ class StreamingAudioService:
             self.speech_config.set_property(speechsdk.PropertyId.SpeechServiceConnection_InitialSilenceTimeoutMs, "5000")
             # self.speech_config.set_property(speechsdk.PropertyId.SpeechServiceConnection_EndSilenceTimeoutMs, "3000"
             
-            logging.info("✅ Enhanced Azure Speech Service initialized successfully")
+            logging.info("Enhanced Azure Speech Service initialized successfully")
             
         except Exception as e:
-            logging.error(f"❌ Error initializing Azure Speech Service: {e}", exc_info=True)
+            logging.error(f"Error initializing Azure Speech Service: {e}", exc_info=True)
             self.speech_config = None
 
     def setup_azure_recognizer(self, session_state: StreamingSessionState) -> bool:
@@ -90,7 +90,9 @@ class StreamingAudioService:
                 """Handle finalized utterances with enhanced processing"""
                 if evt.result.reason == speechsdk.ResultReason.RecognizedSpeech:
                     utterance = evt.result.text.strip()
-                    logging.info(f"✅ [{session_state.streaming.webrtc_id}] RECOGNIZED: '{utterance}'")
+                    fragment_count = len(session_state.streaming.session_transcript_fragments)
+                    logging.info(f"API: Azure.fragment_received | status=success | fragment_num={fragment_count + 1}")
+                    logging.info(f"[{session_state.streaming.webrtc_id}] RECOGNIZED: '{utterance}'")
                     
                     if utterance:
                         # Extract and store JSON result (from your service approach)
@@ -99,9 +101,9 @@ class StreamingAudioService:
                             try:
                                 pronunciation_data = json.loads(json_result)
                                 session_state.streaming.session_transcript_fragments.append(pronunciation_data)
-                                logging.info(f"📊 [{session_state.streaming.webrtc_id}] Pronunciation data extracted and stored")
+                                logging.info(f"[{session_state.streaming.webrtc_id}] Pronunciation data extracted and stored")
                             except json.JSONDecodeError as e:
-                                logging.error(f"❌ Failed to parse JSON result: {e}")
+                                logging.error(f"Failed to parse JSON result: {e}")
                         
                         # Update current utterance buffer for real-time display
                         session_state.streaming.current_utterance_buffer = utterance
@@ -110,17 +112,17 @@ class StreamingAudioService:
                     # Enhanced error handling from your service
                     cancellation = evt.result.cancellation_details
                     error_msg = f"Recognition Canceled: {cancellation.reason} - {cancellation.error_details}"
-                    logging.error(f"❌ [{session_state.streaming.webrtc_id}] {error_msg}")
+                    logging.error(f"[{session_state.streaming.webrtc_id}] {error_msg}")
                     session_state.streaming.last_error = cancellation.error_details
                     session_state.streaming.is_recording = False
                     
                 elif evt.result.reason == speechsdk.ResultReason.NoMatch:
-                    logging.warning(f"⚠️ [{session_state.streaming.webrtc_id}] No speech could be recognized")
+                    logging.warning(f"[{session_state.streaming.webrtc_id}] No speech could be recognized")
 
             def on_recognizing(evt: speechsdk.SpeechRecognitionEventArgs):
                 """Handle partial recognition updates (POC functionality)"""
                 session_state.streaming.current_utterance_buffer = evt.result.text
-                logging.debug(f"🔄 [{session_state.streaming.webrtc_id}] Partial: '{evt.result.text}'")
+                logging.debug(f"[{session_state.streaming.webrtc_id}] Partial: '{evt.result.text}'")
 
             # Connect event handlers
             recognizer.recognized.connect(on_recognized)
@@ -129,12 +131,12 @@ class StreamingAudioService:
             # Store components in session state
             session_state.streaming.push_stream = push_stream
             session_state.streaming.recognizer = recognizer
-            
-            logging.info(f"✅ [{session_state.streaming.webrtc_id}] Azure recognizer setup successful")
+
+            logging.info(f"[{session_state.streaming.webrtc_id}] Azure recognizer setup successful")
             return True
             
         except Exception as e:
-            logging.error(f"❌ [{session_state.streaming.webrtc_id}] Failed to setup Azure recognizer: {e}")
+            logging.error(f"[{session_state.streaming.webrtc_id}] Failed to setup Azure recognizer: {e}")
             session_state.streaming.last_error = str(e)
             return False
 
@@ -142,6 +144,7 @@ class StreamingAudioService:
         """
         Start recording with enhanced retry logic and resource management
         """
+        start_time = time.time()
         session_state.streaming.retry_count = 0
         
         for attempt in range(session_state.streaming.max_retries + 1):
@@ -149,8 +152,15 @@ class StreamingAudioService:
                 # Setup recognizer with enhanced configuration
                 if self.setup_azure_recognizer(session_state):
                     # Start Azure recognition
+                    api_start = time.time()
+                    logging.info(f"API: Azure.start_continuous_recognition | status=starting")
                     session_state.streaming.recognizer.start_continuous_recognition() # type: ignore
+                    api_duration = time.time() - api_start
+                    logging.info(f"API: Azure.start_continuous_recognition | status=success | duration={api_duration:.2f}s")
+                    
+                    logging.info(f"STATE: is_recording changed from False to True")
                     session_state.streaming.is_recording = True
+                    logging.info(f"STATE: is_active changed from False to True")
                     session_state.streaming.is_active = True
                     # Initialize session timing and counters (from your service)
                     session_state.streaming.recording_start_time = time.time()
@@ -167,13 +177,15 @@ class StreamingAudioService:
                     # Start enhanced audio consumer thread
                     self._start_consumer_thread(session_state)
 
-                    logging.info(f"✅ [{session_state.streaming.webrtc_id}] Recording started (attempt {attempt + 1})")
-                    return True, "🎙️ Recording started..."
+                    elapsed = time.time() - start_time
+                    logging.info(f"[{session_state.streaming.webrtc_id}] Recording started (attempt {attempt + 1})")
+                    logging.info(f"TIMING: start_recording completed in {elapsed:.2f}s")
+                    return True, "Recording started..."
                 
             except Exception as e:
                 session_state.streaming.retry_count += 1
                 error_msg = f"Recording start attempt {attempt + 1} failed: {e}"
-                logging.warning(f"⚠️ [{session_state.streaming.webrtc_id}] {error_msg}")
+                logging.warning(f"[{session_state.streaming.webrtc_id}] {error_msg}")
                 session_state.streaming.last_error = str(e)
                 
                 if attempt < session_state.streaming.max_retries:
@@ -181,7 +193,7 @@ class StreamingAudioService:
                     continue
         
         # All retries failed
-        final_error = f"❌ Failed to start recording after {session_state.streaming.max_retries + 1} attempts"
+        final_error = f"Failed to start recording after {session_state.streaming.max_retries + 1} attempts"
         if session_state.streaming.last_error:
             final_error += f": {session_state.streaming.last_error}"
             
@@ -191,9 +203,10 @@ class StreamingAudioService:
         """
         Stop recording and consolidate results using enhanced fragment processing
         """
+        start_time = time.time()
         try:
             if not session_state.streaming.is_recording:
-                logging.warning(f"⚠️ [{session_state.streaming.webrtc_id}] Stop called but not recording")
+                logging.warning(f"[{session_state.streaming.webrtc_id}] Stop called but not recording")
                 return False, "Not currently recording", None
                 
             # Flush remaining audio buffer (POC logic)
@@ -204,8 +217,13 @@ class StreamingAudioService:
             
             # Stop Azure recognition and cleanup (your service's approach)
             if session_state.streaming.recognizer:
+                api_start = time.time()
+                logging.info(f"API: Azure.stop_continuous_recognition | status=starting")
                 session_state.streaming.recognizer.stop_continuous_recognition()
+                api_duration = time.time() - api_start
+                logging.info(f"API: Azure.stop_continuous_recognition | status=success | duration={api_duration:.2f}s")
             
+            logging.info(f"STATE: is_recording changed from True to False")
             session_state.streaming.is_recording = False
             
             # Enhanced fragment consolidation from your service
@@ -214,32 +232,38 @@ class StreamingAudioService:
             if pronunciation_report:
                 # Build transcript from validated pronunciation report
                 final_transcript = pronunciation_report.display_text
-                logging.info(f"✅ [{session_state.streaming.webrtc_id}] Session finalized: '{final_transcript}'")
+                logging.info(f"[{session_state.streaming.webrtc_id}] Session finalized: '{final_transcript}'")
+                elapsed = time.time() - start_time
+                logging.info(f"TIMING: stop_recording completed in {elapsed:.2f}s")
                 return True, final_transcript, pronunciation_report
             else:
                 # Fallback to partial results if available
                 partial_transcript = session_state.streaming.current_utterance_buffer or "(No speech detected)"
-                logging.warning(f"⚠️ [{session_state.streaming.webrtc_id}] No validated results, using partial: '{partial_transcript}'")
+                logging.warning(f"[{session_state.streaming.webrtc_id}] No validated results, using partial: '{partial_transcript}'")
+                elapsed = time.time() - start_time
+                logging.info(f"TIMING: stop_recording completed in {elapsed:.2f}s")
                 return False, partial_transcript, None
                 
         except Exception as e:
             error_msg = f"Failed to stop recording: {e}"
-            logging.error(f"❌ [{session_state.streaming.webrtc_id}] {error_msg}")
+            logging.error(f"[{session_state.streaming.webrtc_id}] {error_msg}")
             session_state.streaming.last_error = str(e)
             return False, error_msg, None
         finally:
             # Always cleanup resources
             session_state.cleanup_streaming_resources()
             # ADD: Signal that session can be removed
+            logging.info(f"STATE: is_active changed from True to False")
             session_state.streaming.is_active = False
 
     def _consolidate_results(self, session_state: StreamingSessionState) -> Optional[AzurePronunciationReport]:
         """
         Smart consolidation of recognition fragments using your service's logic
         """
+        start_time = time.time()
         fragments = session_state.streaming.session_transcript_fragments
         if not fragments:
-            logging.warning(f"⚠️ [{session_state.streaming.webrtc_id}] No speech fragments to consolidate")
+            logging.warning(f"[{session_state.streaming.webrtc_id}] No speech fragments to consolidate")
             return None
 
         try:
@@ -282,15 +306,18 @@ class StreamingAudioService:
             # Validate with Pydantic
             final_json_string = json.dumps(final_fragment)
             validated_report = AzurePronunciationReport.model_validate_json(final_json_string)
-            
-            logging.info(f"✅ [{session_state.streaming.webrtc_id}] Successfully consolidated {len(fragments)} fragments with {len(all_words)} total words")
+
+            elapsed = time.time() - start_time
+            logging.info(f"[{session_state.streaming.webrtc_id}] Successfully consolidated {len(fragments)} fragments with {len(all_words)} total words")
+            logging.info(f"METRICS: fragments_consolidated={len(fragments)} total_words={len(all_words)} (context: consolidation)")
+            logging.info(f"TIMING: _consolidate_results completed in {elapsed:.2f}s")
             return validated_report
 
         except ValidationError as e:
-            logging.error(f"❌ [{session_state.streaming.webrtc_id}] Pydantic validation failed: {e}")
+            logging.error(f"[{session_state.streaming.webrtc_id}] Pydantic validation failed: {e}")
             return None
         except Exception as e:
-            logging.error(f"❌ [{session_state.streaming.webrtc_id}] Unexpected error during consolidation: {e}")
+            logging.error(f"[{session_state.streaming.webrtc_id}] Unexpected error during consolidation: {e}")
             return None
 
     def _flush_audio_buffer(self, session_state: StreamingSessionState):
@@ -303,7 +330,7 @@ class StreamingAudioService:
             pcm = chunk.astype(np.int16).tobytes()
             session_state.streaming.push_stream.write(pcm)
             session_state.streaming.audio_buffer = []
-            logging.debug(f"🔄 [{session_state.streaming.webrtc_id}] Flushed {len(chunk)} remaining samples")
+            logging.debug(f"[{session_state.streaming.webrtc_id}] Flushed {len(chunk)} remaining samples")
 
     def _start_consumer_thread(self, session_state: StreamingSessionState):
         """Start enhanced audio consumer thread with resource management"""
@@ -313,7 +340,7 @@ class StreamingAudioService:
             try:
                 loop.run_until_complete(self._consume_audio_loop(session_state))
             except Exception as e:
-                logging.error(f"❌ [{session_state.streaming.webrtc_id}] Consumer thread error: {e}")
+                logging.error(f"[{session_state.streaming.webrtc_id}] Consumer thread error: {e}")
             finally:
                 loop.close()
         
@@ -331,10 +358,11 @@ class StreamingAudioService:
         3. Implemented queue pressure relief to prevent backing up
         4. Added performance monitoring and adaptive processing
         """
-        logging.info(f"🚀 [{session_state.streaming.webrtc_id}] Starting OPTIMIZED audio consumer")
+        start_time = time.time()
+        logging.info(f"[{session_state.streaming.webrtc_id}] Starting OPTIMIZED audio consumer")
         
         # CHANGE 1: Larger chunk size for better Azure performance
-        target_samples = int(16000 * 0.2)  # 200ms chunks - optimal for Azure
+        target_samples = int(16000 * 0.5)  # 200ms chunks - optimal for Azure
         
         # CHANGE 2: Add batching variables
         batch_buffer = []
@@ -352,7 +380,7 @@ class StreamingAudioService:
         }
         
         try:
-            logging.info(f"🚀 Consumer starting: recording={session_state.streaming.is_recording}, active={session_state.streaming.is_active}")
+            logging.info(f"[{session_state.streaming.webrtc_id}] Consumer starting: recording={session_state.streaming.is_recording}, active={session_state.streaming.is_active}")
             
             while session_state.streaming.is_active and session_state.streaming.is_recording:
                 try:
@@ -360,7 +388,7 @@ class StreamingAudioService:
                     current_time = time.time()
                     if (session_state.streaming.recording_start_time and 
                         current_time - session_state.streaming.recording_start_time > session_state.streaming.max_recording_seconds):
-                        logging.warning(f"⚠️ [{session_state.streaming.webrtc_id}] Recording time limit reached")
+                        logging.warning(f"[{session_state.streaming.webrtc_id}] Recording time limit reached")
                         session_state.streaming.is_recording = False
                         break
                     
@@ -370,7 +398,7 @@ class StreamingAudioService:
                     
                     # CRITICAL: Queue pressure relief
                     if queue_size > 20:  # Queue backing up critically
-                        # logging.warning(f"🚨 CRITICAL queue backup: {queue_size} items - applying pressure relief")
+                        # logging.warning(f"CRITICAL queue backup: {queue_size} items - applying pressure relief")
                         performance_stats['queue_overflows'] += 1
                         
                         # Emergency drain: process multiple items quickly
@@ -389,12 +417,12 @@ class StreamingAudioService:
                         if emergency_batch:
                             session_state.streaming.audio_buffer.extend(emergency_batch)
                             await self._process_audio_buffer_optimized(session_state, target_samples, force_flush=True)
-                            # logging.info(f"⚡ Emergency processed {len(emergency_batch)} samples from {drain_count} chunks")
+                            # logging.info(f"Emergency processed {len(emergency_batch)} samples from {drain_count} chunks")
                         continue
                     
                     elif queue_size > 10:  # Moderate backup - warn but continue
                         # if queue_warnings % 20 == 0:  # Throttled warning
-                            # logging.warning(f"⚠️ Audio queue backing up: {queue_size} items (warning #{queue_warnings + 1})")
+                            # logging.warning(f"Audio queue backing up: {queue_size} items (warning #{queue_warnings + 1})")
                         queue_warnings += 1
                     
                     # CHANGE 6: Adaptive timeout based on queue pressure
@@ -447,7 +475,7 @@ class StreamingAudioService:
                             # Log performance periodically
                             if performance_stats['batches_sent'] % 50 == 0:
                                 avg_queue = performance_stats['avg_queue_size']
-                                logging.info(f"📊 Performance: {performance_stats['batches_sent']} batches, "
+                                logging.info(f"Performance: {performance_stats['batches_sent']} batches, "
                                         f"avg queue: {avg_queue:.1f}, overflows: {performance_stats['queue_overflows']}")
                     
                     except asyncio.TimeoutError:
@@ -466,11 +494,11 @@ class StreamingAudioService:
                         continue
                         
                 except Exception as e:
-                    logging.error(f"❌ [{session_state.streaming.webrtc_id}] Error in audio consumer: {e}")
+                    logging.error(f"[{session_state.streaming.webrtc_id}] Error in audio consumer: {e}")
                     break
                     
         except Exception as e:
-            logging.error(f"❌ [{session_state.streaming.webrtc_id}] Fatal error in consumer loop: {e}")
+            logging.error(f"[{session_state.streaming.webrtc_id}] Fatal error in consumer loop: {e}")
         finally:
             # Process any final batch
             if batch_buffer:
@@ -481,10 +509,12 @@ class StreamingAudioService:
                     session_state.streaming.audio_buffer.extend(final_audio)
                     await self._process_audio_buffer_optimized(session_state, target_samples, force_flush=True)
                 except Exception as e:
-                    logging.error(f"❌ Error processing final batch: {e}")
-            
-            logging.info(f"🛑 [{session_state.streaming.webrtc_id}] OPTIMIZED audio consumer stopped")
-            logging.info(f"📊 Final stats: {performance_stats}")
+                    logging.error(f"Error processing final batch: {e}")
+
+            elapsed = time.time() - start_time
+            logging.info(f"[{session_state.streaming.webrtc_id}] OPTIMIZED audio consumer stopped")
+            logging.info(f"Final stats: {performance_stats}")
+            logging.info(f"TIMING: _consume_audio_loop completed in {elapsed:.2f}s")
 
     # CHANGE 10: Add new optimized buffer processing method
     async def _process_audio_buffer_optimized(self, session_state: StreamingSessionState, target_samples: int, force_flush: bool = False):
@@ -526,12 +556,12 @@ class StreamingAudioService:
                 
                 # Track processing for resource management
                 session_state.streaming.audio_chunks_processed += 1
-                
-                logging.debug(f"📊 [{session_state.streaming.webrtc_id}] Processed {len(chunk)} samples "
+
+                logging.debug(f"Processed {len(chunk)} samples "
                             f"(chunk #{session_state.streaming.audio_chunks_processed})")
                 
             except Exception as e:
-                logging.error(f"❌ Error processing audio buffer: {e}")
+                logging.error(f"Error processing audio buffer: {e}")
 
     def queue_audio_data(self, audio_data: List[float], session_state: StreamingSessionState):
         """
@@ -551,10 +581,10 @@ class StreamingAudioService:
                 return
             elif queue_size > 30:
                 # Warn but still accept
-                logging.warning(f"⚠️ Queue high: {queue_size} items")
+                logging.warning(f"Queue high: {queue_size} items")
             session_state.streaming.audio_queue.put_nowait(audio_data)
-            logging.debug(f"📥 [{session_state.streaming.webrtc_id}] Queued {len(audio_data)} samples (queue: {queue_size + 1})")
+            logging.debug(f"Queued {len(audio_data)} samples (queue: {queue_size + 1})")
         except asyncio.QueueFull:
-            logging.error(f"⚠️ [{session_state.streaming.webrtc_id}] Audio queue full, dropping frame")
+            logging.error(f"Queue full, dropping frame")
         except Exception as e:
-            logging.error(f"❌ [{session_state.streaming.webrtc_id}] Error queuing audio: {e}")
+            logging.error(f"[{session_state.streaming.webrtc_id}] Error queuing audio: {e}")
