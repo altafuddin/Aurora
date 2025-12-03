@@ -136,7 +136,9 @@ def chat_function(
     
     # --- 5. Synthesize Audio for AI's Response ---
     cleaned_text = clean_text_for_speech(final_ai_response)
-    ai_audio_path = tts_service.synthesize_speech(cleaned_text)
+    # ai_audio_path = tts_service.synthesize_speech(cleaned_text)
+    ai_audio_path = None
+
 
     ai_turn = ChatTurn(text=final_ai_response)
     session_state.chat_history.append(ai_turn)

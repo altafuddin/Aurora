@@ -214,6 +214,7 @@ class StreamingAudioService:
             
             # Give Azure a moment to process final audio
             time.sleep(0.5)
+            logging.info("[stop_recording ] waiting 500ms for final processing")
             
             # Stop Azure recognition and cleanup (your service's approach)
             if session_state.streaming.recognizer:
@@ -253,7 +254,7 @@ class StreamingAudioService:
             # Always cleanup resources
             session_state.cleanup_streaming_resources()
             # ADD: Signal that session can be removed
-            logging.info(f"STATE: is_active changed from True to False")
+            # logging.info(f"STATE: is_active changed from True to False")
             session_state.streaming.is_active = False
 
     def _consolidate_results(self, session_state: StreamingSessionState) -> Optional[AzurePronunciationReport]:

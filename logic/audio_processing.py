@@ -67,7 +67,9 @@ class AuroraStreamHandler(StreamHandler):
                     
                 # 6. Enqueue processed audio
                 try:
-                    session_state.streaming.audio_queue.put_nowait(audio_data.tolist())
+                    # Ensure audio_data is numpy array before calling tolist()
+                    audio_list = np.asarray(audio_data).tolist()
+                    session_state.streaming.audio_queue.put_nowait(audio_list)
                     self.chunk_counter += 1
                     
                     # Log every 10th chunk with queue size
