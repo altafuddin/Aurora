@@ -1,6 +1,6 @@
 import gradio as gr
 # from fastapi import FastAPI
-from pyngrok import ngrok
+# from pyngrok import ngrok
 from gradio_app import create_gradio_interface
 from core.logger_config import setup_logger
 
@@ -33,7 +33,7 @@ if use_ngrok:
 else:
     # Fallback to Gradio share
     gradio_interface.launch(
-        server_name="127.0.0.1",
+        server_name="0.0.0.0",
         server_port=7860,
         share=False,  
         show_error=True,

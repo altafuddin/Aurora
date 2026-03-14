@@ -1,5 +1,5 @@
 # <-- AssemblyAI Adapter: handles all STT interaction
-import assemblyai as aai
+# import assemblyai as aai  # Unused: AssemblyAI deprecated in favour of Azure Speech; package not installed
 from config import ASSEMBLYAI_API_KEY
 import sys
 
