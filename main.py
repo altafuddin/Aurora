@@ -1,6 +1,6 @@
 import gradio as gr
 # from fastapi import FastAPI
-from pyngrok import ngrok
+# from pyngrok import ngrok
 from gradio_app import create_gradio_interface
 from core.logger_config import setup_logger
 
